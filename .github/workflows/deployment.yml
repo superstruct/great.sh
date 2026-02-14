@@ -1,0 +1,52 @@
+name: cd
+
+on:
+  push:
+    branches: [release]
+    paths-ignore:
+      - 'infra/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::756605216505:role/great-sh-deploy
+          aws-region: us-east-1
+
+      - name: Deploy assets
+        run: |
+          aws s3 sync dist/assets s3://great.sh-cloudfront/assets \
+            --cache-control "public,max-age=31536000,immutable"
+
+      - name: Deploy HTML
+        run: |
+          aws s3 sync dist s3://great.sh-cloudfront \
+            --exclude "assets/*" \
+            --cache-control "no-cache" \
+            --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
