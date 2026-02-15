@@ -13,8 +13,8 @@ export function OpenSource() {
           </h2>
           <p className="text-text-secondary mb-6 leading-relaxed">
             The CLI is free and open source under the Apache 2.0 license. All local features work without
-            an account. Cloud sync and team features are optional paid tiers &mdash; the
-            Bitwarden model, applied to dev environments.
+            an account. Cloud sync and team features are optional paid tiers &mdash; the core
+            tool is yours to keep, forever.
           </p>
           <p className="text-text-tertiary text-sm mb-10">
             BYO credentials. We never see your API keys. All encryption happens client-side.
