@@ -21,7 +21,7 @@ export function Footer() {
             </a>
             <span className="text-border">|</span>
             <span className="text-text-tertiary">
-              Open source &middot; MIT License
+              Open source &middot; Apache-2.0 License
             </span>
           </div>
         </div>

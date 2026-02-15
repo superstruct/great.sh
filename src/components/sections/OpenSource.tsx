@@ -12,7 +12,7 @@ export function OpenSource() {
             Open source. Free forever.
           </h2>
           <p className="text-text-secondary mb-6 leading-relaxed">
-            The CLI is free and open source under the MIT license. All local features work without
+            The CLI is free and open source under the Apache 2.0 license. All local features work without
             an account. Cloud sync and team features are optional paid tiers &mdash; the
             Bitwarden model, applied to dev environments.
           </p>
