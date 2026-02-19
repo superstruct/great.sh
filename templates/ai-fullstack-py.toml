@@ -1,0 +1,19 @@
+[project]
+name = "my-project"
+description = "Full-stack Python AI project"
+
+[tools]
+python = "3.12"
+node = "22"
+
+[agents.claude]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[mcp.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+
+[secrets]
+provider = "env"
+required = ["ANTHROPIC_API_KEY"]

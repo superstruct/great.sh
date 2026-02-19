@@ -1,0 +1,20 @@
+[project]
+name = "my-project"
+description = "Full-stack TypeScript AI project"
+
+[tools]
+node = "22"
+[tools.cli]
+typescript = "latest"
+
+[agents.claude]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[mcp.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+
+[secrets]
+provider = "env"
+required = ["ANTHROPIC_API_KEY"]
