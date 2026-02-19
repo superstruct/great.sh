@@ -15,14 +15,41 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    let platform = platform::detect_platform();
+    let info = platform::detect_platform_info();
 
     if args.json {
-        println!(r#"{{"platform": "{}", "status": "not yet implemented"}}"#, platform);
+        println!(
+            r#"{{"platform": "{}", "arch": "{:?}", "shell": "{}"}}"#,
+            info.platform,
+            info.platform.arch(),
+            info.shell
+        );
     } else {
-        println!("great status: not yet implemented");
+        println!("great status");
+        println!("  platform: {}", info.platform.display_detailed());
         if args.verbose {
-            println!("  platform: {}", platform);
+            println!("  capabilities:");
+            let caps = &info.capabilities;
+            if caps.has_homebrew {
+                println!("    homebrew: installed");
+            }
+            if caps.has_apt {
+                println!("    apt: installed");
+            }
+            if caps.has_dnf {
+                println!("    dnf: installed");
+            }
+            if caps.has_snap {
+                println!("    snap: installed");
+            }
+            if caps.has_systemd {
+                println!("    systemd: active");
+            }
+            if caps.has_docker {
+                println!("    docker: installed");
+            }
+            println!("  shell: {}", info.shell);
+            println!("  root: {}", info.is_root);
         }
     }
     Ok(())
