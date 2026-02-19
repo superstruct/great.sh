@@ -4,9 +4,17 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use schema::GreatConfig;
+// Re-exported for downstream consumption by CLI subcommands.
+#[allow(unused_imports)]
+pub use schema::{
+    AgentConfig, ConfigMessage, GreatConfig, McpConfig, PlatformConfig, PlatformOverride,
+    ProjectConfig, SecretsConfig, ToolsConfig,
+};
 
-/// Load configuration from the default or specified path.
+/// Load configuration from the specified path (or discover it), parse, and validate.
+///
+/// Returns the parsed [`GreatConfig`] on success. Validation warnings are printed
+/// to stderr; validation errors cause the load to fail with a descriptive message.
 pub fn load(path: Option<&str>) -> Result<GreatConfig> {
     let config_path = match path {
         Some(p) => PathBuf::from(p),
@@ -15,6 +23,20 @@ pub fn load(path: Option<&str>) -> Result<GreatConfig> {
 
     let contents = std::fs::read_to_string(&config_path)?;
     let config: GreatConfig = toml::from_str(&contents)?;
+
+    // Run validation and report issues
+    let messages = config.validate();
+    for msg in &messages {
+        match msg {
+            ConfigMessage::Warning(w) => {
+                eprintln!("config warning: {}", w);
+            }
+            ConfigMessage::Error(e) => {
+                anyhow::bail!("config error in {}: {}", config_path.display(), e);
+            }
+        }
+    }
+
     Ok(config)
 }
 
