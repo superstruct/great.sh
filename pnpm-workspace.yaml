@@ -1,6 +1,3 @@
 packages:
-  - infra/cdk
-
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
+  - 'site'
+  - 'infra/cdk'
