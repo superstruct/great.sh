@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args as ClapArgs, Subcommand};
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     #[command(subcommand)]
@@ -24,9 +26,11 @@ pub enum TemplateCommand {
 
 pub fn run(args: Args) -> Result<()> {
     match args.command {
-        TemplateCommand::List => println!("great template list: not yet implemented"),
-        TemplateCommand::Apply { .. } => println!("great template apply: not yet implemented"),
-        TemplateCommand::Update => println!("great template update: not yet implemented"),
+        TemplateCommand::List => output::warning("great template list: not yet implemented"),
+        TemplateCommand::Apply { .. } => {
+            output::warning("great template apply: not yet implemented");
+        }
+        TemplateCommand::Update => output::warning("great template update: not yet implemented"),
     }
     Ok(())
 }

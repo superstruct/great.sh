@@ -3,6 +3,7 @@ pub mod diff;
 pub mod doctor;
 pub mod init;
 pub mod mcp;
+pub mod output;
 pub mod status;
 pub mod sync;
 pub mod template;
@@ -15,6 +16,18 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "great", version, about, long_about = None)]
 pub struct Cli {
+    /// Increase output verbosity
+    #[arg(long, short, global = true)]
+    pub verbose: bool,
+
+    /// Suppress all output except errors
+    #[arg(long, short = 'q', global = true)]
+    pub quiet: bool,
+
+    /// Disable interactive prompts (for CI/automation)
+    #[arg(long, global = true)]
+    pub non_interactive: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

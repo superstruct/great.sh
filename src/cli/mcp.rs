@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args as ClapArgs, Subcommand};
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     #[command(subcommand)]
@@ -27,9 +29,9 @@ pub enum McpCommand {
 
 pub fn run(args: Args) -> Result<()> {
     match args.command {
-        McpCommand::List => println!("great mcp list: not yet implemented"),
-        McpCommand::Add { .. } => println!("great mcp add: not yet implemented"),
-        McpCommand::Test { .. } => println!("great mcp test: not yet implemented"),
+        McpCommand::List => output::warning("great mcp list: not yet implemented"),
+        McpCommand::Add { .. } => output::warning("great mcp add: not yet implemented"),
+        McpCommand::Test { .. } => output::warning("great mcp test: not yet implemented"),
     }
     Ok(())
 }

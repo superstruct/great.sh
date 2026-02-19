@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     /// Attempt to fix issues automatically
@@ -9,6 +11,6 @@ pub struct Args {
 }
 
 pub fn run(_args: Args) -> Result<()> {
-    println!("great doctor: not yet implemented");
+    output::warning("great doctor: not yet implemented");
     Ok(())
 }

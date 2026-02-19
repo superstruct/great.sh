@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     /// Path to configuration file
@@ -17,6 +19,6 @@ pub struct Args {
 }
 
 pub fn run(_args: Args) -> Result<()> {
-    println!("great apply: not yet implemented");
+    output::warning("great apply: not yet implemented");
     Ok(())
 }

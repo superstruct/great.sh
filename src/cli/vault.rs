@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args as ClapArgs, Subcommand};
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     #[command(subcommand)]
@@ -32,10 +34,12 @@ pub enum VaultCommand {
 
 pub fn run(args: Args) -> Result<()> {
     match args.command {
-        VaultCommand::Login => println!("great vault login: not yet implemented"),
-        VaultCommand::Unlock => println!("great vault unlock: not yet implemented"),
-        VaultCommand::Set { .. } => println!("great vault set: not yet implemented"),
-        VaultCommand::Import { .. } => println!("great vault import: not yet implemented"),
+        VaultCommand::Login => output::warning("great vault login: not yet implemented"),
+        VaultCommand::Unlock => output::warning("great vault unlock: not yet implemented"),
+        VaultCommand::Set { .. } => output::warning("great vault set: not yet implemented"),
+        VaultCommand::Import { .. } => {
+            output::warning("great vault import: not yet implemented");
+        }
     }
     Ok(())
 }

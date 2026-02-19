@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args as ClapArgs, Subcommand};
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     #[command(subcommand)]
@@ -18,8 +20,8 @@ pub enum SyncCommand {
 
 pub fn run(args: Args) -> Result<()> {
     match args.command {
-        SyncCommand::Push => println!("great sync push: not yet implemented"),
-        SyncCommand::Pull => println!("great sync pull: not yet implemented"),
+        SyncCommand::Push => output::warning("great sync push: not yet implemented"),
+        SyncCommand::Pull => output::warning("great sync pull: not yet implemented"),
     }
     Ok(())
 }

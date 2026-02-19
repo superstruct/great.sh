@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 
+use crate::cli::output;
+
 #[derive(ClapArgs)]
 pub struct Args {
     /// Template to initialize from
@@ -13,6 +15,6 @@ pub struct Args {
 }
 
 pub fn run(_args: Args) -> Result<()> {
-    println!("great init: not yet implemented");
+    output::warning("great init: not yet implemented");
     Ok(())
 }
