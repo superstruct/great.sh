@@ -12,13 +12,13 @@ main() {
     echo
 
     # Detect platform
-    local os arch target
+    local os arch asset
     os="$(uname -s)"
     arch="$(uname -m)"
 
     case "$os" in
-        Linux)  os="unknown-linux-gnu" ;;
-        Darwin) os="apple-darwin" ;;
+        Linux)  os="linux" ;;
+        Darwin) os="macos" ;;
         *)
             echo "Error: Unsupported OS: $os"
             exit 1
@@ -34,32 +34,31 @@ main() {
             ;;
     esac
 
-    target="${arch}-${os}"
-    echo "  Platform: ${target}"
+    asset="great-${os}-${arch}"
+    echo "  Platform: ${os}/${arch}"
 
-    # Get latest release
+    # Download latest release binary
     local latest_url
-    latest_url="https://github.com/${REPO}/releases/latest/download/great-${target}.tar.gz"
+    latest_url="https://github.com/${REPO}/releases/latest/download/${asset}"
     echo "  Downloading from: ${latest_url}"
 
     # Create install directory
     mkdir -p "$INSTALL_DIR"
 
-    # Download and extract
+    # Download binary
     local tmp
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
 
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$latest_url" -o "$tmp/great.tar.gz"
+        curl -sSL "$latest_url" -o "$tmp/great"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$tmp/great.tar.gz" "$latest_url"
+        wget -qO "$tmp/great" "$latest_url"
     else
         echo "Error: curl or wget required"
         exit 1
     fi
 
-    tar xzf "$tmp/great.tar.gz" -C "$tmp"
     install -m 755 "$tmp/great" "$INSTALL_DIR/great"
 
     echo
