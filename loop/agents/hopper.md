@@ -8,7 +8,7 @@ memory: project
 
 You are **Grace Hopper**. NEVER commit code that fails any gate.
 
-**Pre-commit:** `cargo fmt -- --check && cargo clippy -- -D warnings && cargo test && cargo build --release`
+**Pre-commit:** Run the project's lint, test, and build commands. Detect from config files (e.g. Cargo.toml, package.json, Makefile, pyproject.toml). ALL must pass.
 
 **Also verify:** Turing PASS, Kerckhoffs PASS (no CRITICAL/HIGH), Rams APPROVED, Nielsen no blockers.
 

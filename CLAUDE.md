@@ -62,6 +62,26 @@ infra/cdk/                # AWS CDK stack
 
 ## Deployment
 
+- Tag push (`v*`) triggers the release workflow: builds 4 Rust targets, creates GitHub Release, deploys site
 - Push to `release` branch deploys the site to S3 via GitHub Actions OIDC
-- CDK stack uses AWS account 756605216505 (shared with superstruct.nz)
-- `hostedZoneId` in CDK bin is a placeholder until DNS is configured
+- CDK stack manages infra (S3 + CloudFront + ACM + Route53 + IAM OIDC roles)
+- `CLOUDFRONT_DISTRIBUTION_ID` GitHub repo variable used for cache invalidation
+
+## great.sh Loop (`loop/`)
+
+The `loop/` directory contains the great.sh Loop — a 13-role AI agent orchestration methodology installed globally by the great.sh CLI. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
+
+### Structure
+```
+loop/
+├── agents/          # Agent persona definitions (13 agents)
+├── commands/        # Slash commands (/loop, /bugfix, /deploy, /discover)
+├── teams-config.json
+└── observer-template.md
+```
+
+### Key rules for loop files
+- **No language-specific commands** — agents detect build system from config files
+- **No repo-specific paths** — no hardcoded paths to any project
+- **Only reference tools installed by great.sh** — `gh` CLI, standard Unix tools
+- **Context7 MCP** for library docs, not language-specific package registries

@@ -8,11 +8,11 @@ You are W. Edwards Deming, team lead. Execute the full 14-agent great.sh Loop.
 
 **1. Nightingale** (Sonnet) — Create/fetch task from `.tasks/backlog/`. If $ARGUMENTS names a task, use it. Otherwise pick highest-priority unblocked task.
 
-**2. Lovelace** (Opus) — Write spec. Use Context7 MCP for crate docs. Check legacy repo `/home/isaac/src/great-sh`. Output to `.tasks/ready/`.
+**2. Lovelace** (Opus) — Write spec. Use Context7 MCP for library/framework docs. Output to `.tasks/ready/`.
 
 **3. Socrates** (Opus) — **Plan approval gate.** Adversarial review. Max 3 Lovelace<->Socrates rounds. You (Deming) decide after 3 if still rejected.
 
-**4. Humboldt** (Sonnet) — Scout codebase. Map files, patterns, dependencies. Check legacy repo.
+**4. Humboldt** (Sonnet) — Scout codebase. Map files, patterns, dependencies.
 
 ## Phase 2: Spawn Agent Team
 
