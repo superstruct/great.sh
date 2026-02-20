@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -8,7 +9,249 @@ use crate::cli::output;
 use crate::config;
 use crate::platform::package_manager::{self, PackageManager};
 use crate::platform::runtime::{MiseManager, ProvisionAction};
-use crate::platform::{self, command_exists};
+use crate::platform::{self, command_exists, Platform, PlatformInfo};
+
+// ── Nerd Font support ────────────────────────────────────────────────
+
+const NERD_FONT_VERSION: &str = "v3.4.0";
+const NERD_FONT_BASE_URL: &str = "https://github.com/ryanoasis/nerd-fonts/releases/download";
+
+struct NerdFontSpec {
+    display_name: &'static str,
+    zip_name: &'static str,
+    brew_cask: &'static str,
+    file_prefix: &'static str,
+}
+
+fn nerd_font_for_platform(platform: &Platform) -> NerdFontSpec {
+    match platform {
+        Platform::MacOS { .. } => NerdFontSpec {
+            display_name: "MesloLG Nerd Font",
+            zip_name: "Meslo",
+            brew_cask: "font-meslo-lg-nerd-font",
+            file_prefix: "MesloLGS",
+        },
+        _ => NerdFontSpec {
+            display_name: "UbuntuSans Nerd Font",
+            zip_name: "UbuntuSans",
+            brew_cask: "font-ubuntu-sans-nerd-font",
+            file_prefix: "UbuntuSansNerdFont",
+        },
+    }
+}
+
+/// Check whether any file in `dir` starts with `file_prefix`.
+fn has_nerd_font(dir: &Path, file_prefix: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(file_prefix)
+        })
+}
+
+/// Return true if the platform-appropriate Nerd Font is already installed.
+fn nerd_font_installed(platform: &Platform, spec: &NerdFontSpec) -> bool {
+    match platform {
+        Platform::MacOS { .. } => {
+            let home = match dirs::home_dir() {
+                Some(h) => h,
+                None => return false,
+            };
+            has_nerd_font(&home.join("Library/Fonts"), spec.file_prefix)
+                || has_nerd_font(Path::new("/Library/Fonts"), spec.file_prefix)
+        }
+        _ => {
+            let home = match dirs::home_dir() {
+                Some(h) => h,
+                None => return false,
+            };
+            has_nerd_font(&home.join(".local/share/fonts"), spec.file_prefix)
+        }
+    }
+}
+
+/// Download a Nerd Font zip and extract `.ttf` files to `~/.local/share/fonts`.
+fn download_and_install_nerd_font(home: &Path, spec: &NerdFontSpec) -> Result<()> {
+    let url = format!(
+        "{}/{}/{}.zip",
+        NERD_FONT_BASE_URL, NERD_FONT_VERSION, spec.zip_name
+    );
+
+    let sp = output::spinner(&format!("Downloading {} ...", spec.display_name));
+
+    let response = reqwest::blocking::get(&url)
+        .with_context(|| format!("failed to download {}", url))?;
+    let bytes = response
+        .bytes()
+        .context("failed to read font zip bytes")?;
+
+    sp.set_message(format!("Extracting {} ...", spec.display_name));
+
+    let font_dir = home.join(".local/share/fonts");
+    std::fs::create_dir_all(&font_dir).context("failed to create ~/.local/share/fonts")?;
+
+    let reader = Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(reader).context("failed to open font zip")?;
+
+    let mut count = 0usize;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let name = file.name().to_string();
+        if name.ends_with(".ttf") {
+            // Use only the filename, not any directory prefix inside the zip
+            let file_name = Path::new(&name)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or(name.clone());
+
+            let out_path = font_dir.join(&file_name);
+            let mut out_file = std::fs::File::create(&out_path)
+                .with_context(|| format!("failed to create {}", out_path.display()))?;
+            std::io::copy(&mut file, &mut out_file)?;
+            count += 1;
+        }
+    }
+
+    sp.finish_and_clear();
+
+    if count == 0 {
+        anyhow::bail!("no .ttf files found in {}.zip", spec.zip_name);
+    }
+
+    // Rebuild font cache
+    let _ = std::process::Command::new("fc-cache")
+        .args(["-fv"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    Ok(())
+}
+
+/// Copy Nerd Font files from the Linux font dir to the Windows per-user font dir (WSL2).
+fn copy_fonts_to_windows(home: &Path, file_prefix: &str) -> Result<()> {
+    // Get Windows username
+    let output = std::process::Command::new("cmd.exe")
+        .args(["/c", "echo", "%USERNAME%"])
+        .output()
+        .context("failed to run cmd.exe to get Windows username")?;
+    let win_user = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if win_user.is_empty() || win_user.contains('%') {
+        anyhow::bail!("could not determine Windows username");
+    }
+
+    let win_font_dir = Path::new("/mnt/c/Users")
+        .join(&win_user)
+        .join("AppData/Local/Microsoft/Windows/Fonts");
+
+    if !win_font_dir.exists() {
+        std::fs::create_dir_all(&win_font_dir)
+            .context("failed to create Windows per-user font directory")?;
+    }
+
+    let linux_font_dir = home.join(".local/share/fonts");
+    let entries = std::fs::read_dir(&linux_font_dir)
+        .context("failed to read Linux font directory")?;
+
+    for entry in entries.filter_map(|e| e.ok()) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(file_prefix) && name.ends_with(".ttf") {
+            let dest = win_font_dir.join(&name);
+            if let Err(e) = std::fs::copy(entry.path(), &dest) {
+                output::warning(&format!("  Could not copy {} to Windows fonts: {}", name, e));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Install a Nerd Font appropriate for the current platform.
+/// Errors are reported but never block the rest of `great apply`.
+fn install_nerd_font(dry_run: bool, platform_info: &PlatformInfo) {
+    let spec = nerd_font_for_platform(&platform_info.platform);
+
+    if nerd_font_installed(&platform_info.platform, &spec) {
+        output::success(&format!("  {} — already installed", spec.display_name));
+        return;
+    }
+
+    if dry_run {
+        output::info(&format!("  {} — would install", spec.display_name));
+        return;
+    }
+
+    match &platform_info.platform {
+        Platform::MacOS { .. } => {
+            let status = std::process::Command::new("brew")
+                .args(["install", "--cask", spec.brew_cask])
+                .status();
+            match status {
+                Ok(s) if s.success() => {
+                    output::success(&format!("  {} — installed via Homebrew", spec.display_name));
+                }
+                _ => {
+                    output::error(&format!(
+                        "  {} — failed to install via brew. Run: brew install --cask {}",
+                        spec.display_name, spec.brew_cask
+                    ));
+                }
+            }
+        }
+        Platform::Wsl { .. } => {
+            let home = match dirs::home_dir() {
+                Some(h) => h,
+                None => {
+                    output::error("  Could not determine home directory for font install");
+                    return;
+                }
+            };
+            match download_and_install_nerd_font(&home, &spec) {
+                Ok(()) => {
+                    output::success(&format!("  {} — installed", spec.display_name));
+                    // Also copy to Windows side so the terminal can use them
+                    if let Err(e) = copy_fonts_to_windows(&home, spec.file_prefix) {
+                        output::warning(&format!(
+                            "  Could not copy fonts to Windows (install manually in Windows Terminal settings): {}",
+                            e
+                        ));
+                    } else {
+                        output::success("  Nerd Font files copied to Windows user fonts");
+                        output::info(
+                            "  Note: You may need to select the font in your terminal settings",
+                        );
+                    }
+                }
+                Err(e) => {
+                    output::error(&format!("  {} — failed to install: {}", spec.display_name, e));
+                }
+            }
+        }
+        _ => {
+            // Generic Linux
+            let home = match dirs::home_dir() {
+                Some(h) => h,
+                None => {
+                    output::error("  Could not determine home directory for font install");
+                    return;
+                }
+            };
+            match download_and_install_nerd_font(&home, &spec) {
+                Ok(()) => {
+                    output::success(&format!("  {} — installed", spec.display_name));
+                }
+                Err(e) => {
+                    output::error(&format!("  {} — failed to install: {}", spec.display_name, e));
+                }
+            }
+        }
+    }
+}
 
 /// Special install instructions for CLI tools that can't use a simple
 /// `brew install <name>` or `apt install <name>`.
@@ -464,18 +707,19 @@ pub fn run(args: Args) -> Result<()> {
         }
     }
 
-    // 5c. Configure Starship prompt if starship is in CLI tools
-    if command_exists("starship") {
-        let has_starship_in_config = cfg
-            .tools
-            .as_ref()
-            .and_then(|t| t.cli.as_ref())
-            .map(|cli| cli.contains_key("starship"))
-            .unwrap_or(false);
+    // 5c. Configure Starship prompt and Nerd Font
+    let has_starship_in_config = cfg
+        .tools
+        .as_ref()
+        .and_then(|t| t.cli.as_ref())
+        .map(|cli| cli.contains_key("starship"))
+        .unwrap_or(false);
 
-        if has_starship_in_config {
+    if has_starship_in_config {
+        if command_exists("starship") {
             configure_starship(args.dry_run);
         }
+        install_nerd_font(args.dry_run, &info);
     }
 
     // 6. Check secrets

@@ -116,6 +116,7 @@ pub fn run(args: Args) -> Result<()> {
     if prompt_yes_no("Install Starship prompt?", false)? {
         cli_tools.insert("starship".to_string(), "latest".to_string());
         // Starship shell config is handled by `great apply` after install
+        output::info("  Nerd Font will also be installed (required for Starship glyphs)");
     }
 
     // Cloud CLIs
