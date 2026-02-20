@@ -2,12 +2,12 @@
 
 **The managed AI dev environment.** Beta — open to testing and feedback.
 
-One command. 13 AI agents. Fully configured. Open source.
+One command. 15 AI agents. Fully configured. Open source.
 
 ## Quick Start
 
 ```sh
-curl -sSL great.sh | bash
+curl -sS https://great.sh/install.sh | sh
 great init
 claude
 ```
@@ -15,7 +15,7 @@ claude
 ## What it does
 
 - **One command setup** — from a blank machine to a fully configured AI dev environment
-- **AI agent orchestration** — 13 specialized agents installed into Claude Code with `great loop install`
+- **AI agent orchestration** — 15 specialized agents installed into Claude Code with `great loop install`
 - **MCP server management** — install, configure, and credential-inject MCP servers from the registry
 - **Cloud-synced credentials** — zero-knowledge encrypted vault syncs API keys across machines
 
@@ -37,16 +37,17 @@ claude
 
 ## The great.sh Loop
 
-A 13-role AI agent orchestration methodology. Each role is embodied by a historical figure whose expertise maps to the task.
+A 15-role AI agent orchestration methodology. Each role is embodied by a historical figure whose expertise maps to the task.
 
 ```
 Nightingale → Lovelace → Socrates → Humboldt → Da Vinci →
-  Von Braun / Turing / Rams / Nielsen (parallel) +
-  Knuth → Gutenberg (docs) →
+  Wirth / Turing / Kerckhoffs / Nielsen (parallel) →
+  Dijkstra (code review) → Rams (visual) →
+  Knuth + Gutenberg (docs) →
 Hopper → Deming
 ```
 
-Requirements → spec → review → scout → build → deploy/test/visual/UX → docs → commit → observe. One iteration at a time.
+Requirements → spec → review → scout → build → test/security/perf/UX → code review → visual → docs → commit → observe. One iteration at a time.
 
 ## Templates
 

@@ -155,7 +155,7 @@ fn run_install(project: bool) -> Result<()> {
     std::fs::create_dir_all(&teams_dir)
         .context("failed to create ~/.claude/teams/loop/ directory")?;
 
-    // Write 13 agent files
+    // Write agent files
     for agent in AGENTS {
         let path = agents_dir.join(format!("{}.md", agent.name));
         std::fs::write(&path, agent.content)

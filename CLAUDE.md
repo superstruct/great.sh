@@ -69,7 +69,7 @@ infra/cdk/                # AWS CDK stack
 
 ## great.sh Loop (`loop/`)
 
-The `loop/` directory contains the great.sh Loop — a 13-role AI agent orchestration methodology installed globally by the great.sh CLI. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
+The `loop/` directory contains the great.sh Loop — a 15-role AI agent orchestration methodology installed globally by the great.sh CLI. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
 
 ### Structure
 ```

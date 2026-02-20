@@ -9,7 +9,7 @@ const steps = [
     number: '01',
     title: 'Install',
     description: 'One curl command downloads the great CLI binary. macOS, Ubuntu, WSL2.',
-    command: 'curl -sSL great.sh | bash',
+    command: 'curl -sS https://great.sh/install.sh | sh',
   },
   {
     number: '02',
@@ -32,7 +32,7 @@ const steps = [
   {
     number: '05',
     title: 'Start the Loop',
-    description: 'Install the 13-agent team into Claude Code. Type /loop and describe your task.',
+    description: 'Install the 15-agent team into Claude Code. Type /loop and describe your task.',
     command: 'great loop install --project',
   },
 ]

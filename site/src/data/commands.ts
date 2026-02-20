@@ -1,4 +1,4 @@
-export const installCommand = 'curl -sSL great.sh | bash'
+export const installCommand = 'curl -sS https://great.sh/install.sh | sh'
 
 export const initWizardOutput = `$ great init
 
@@ -30,7 +30,7 @@ export const initWizardOutput = `$ great init
   Your AI dev environment is ready!
 
   Run \`claude\` to start Claude Code with all MCP servers.
-  Run \`great loop install\` to add the 13-agent team.`
+  Run \`great loop install\` to add the 15-agent team.`
 
 export const sampleToml = `# great.toml — AI Dev Environment Specification
 
