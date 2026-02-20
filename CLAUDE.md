@@ -32,7 +32,7 @@ src/                      # Rust source
 ├── error.rs              # GreatError enum (thiserror)
 ├── cli/                  # Subcommand modules (init, apply, status, sync, vault, mcp, doctor, update, diff, template)
 ├── config/               # great.toml loading + schema
-├── platform/             # OS/arch/WSL detection
+├── platform/             # OS/arch/WSL detection + PlatformCapabilities (package managers, WSL2)
 ├── mcp/                  # MCP server management
 ├── vault/                # Credential vault
 └── sync/                 # Cloud sync
