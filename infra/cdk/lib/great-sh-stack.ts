@@ -160,7 +160,7 @@ export class GreatShStack extends cdk.Stack {
         },
         StringLike: {
           'token.actions.githubusercontent.com:sub': [
-            'repo:great-sh/sh.great:*',
+            'repo:superstruct/great.sh:*',
           ],
         },
       }),
@@ -201,7 +201,7 @@ export class GreatShStack extends cdk.Stack {
         },
         StringLike: {
           'token.actions.githubusercontent.com:sub': [
-            'repo:great-sh/sh.great:*',
+            'repo:superstruct/great.sh:*',
           ],
         },
       }),

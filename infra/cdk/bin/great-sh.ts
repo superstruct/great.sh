@@ -9,7 +9,7 @@ new GreatShStack(app, 'GreatShStack', {
     account: '756605216505',
     region: 'us-east-1',
   },
-  hostedZoneId: app.node.tryGetContext('hostedZoneId') ?? 'PLACEHOLDER',
+  hostedZoneId: 'Z00874482ZN5LEHAW7CFQ',
 });
 
 cdk.Tags.of(app).add('Project', 'GreatSh');
