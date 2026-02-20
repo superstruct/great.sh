@@ -118,22 +118,29 @@ pub fn detect_platform_info() -> PlatformInfo {
 
 /// Check whether a command is available on `$PATH`.
 ///
-/// Uses `which` on Unix and `where` on Windows. Returns `false` if the
-/// command is not found or the lookup itself fails.
+/// Uses `command -v` (POSIX shell built-in) on Unix and `where` on Windows.
+/// Returns `false` if the command is not found or the lookup itself fails.
 pub fn command_exists(cmd: &str) -> bool {
-    let lookup = if cfg!(target_os = "windows") {
-        "where"
+    if cfg!(target_os = "windows") {
+        std::process::Command::new("where")
+            .arg(cmd)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
     } else {
-        "which"
-    };
-
-    std::process::Command::new(lookup)
-        .arg(cmd)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        // Use `command -v` via sh — it's a POSIX shell built-in, unlike
+        // `which` which may not be installed (e.g. Fedora minimal).
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("command -v {}", cmd))
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
 }
 
 /// Detect CPU architecture from `std::env::consts::ARCH`.
