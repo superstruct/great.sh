@@ -37,7 +37,7 @@ struct CommandFile {
     content: &'static str,
 }
 
-/// All 13 agent persona files shipped with the great.sh Loop.
+/// All 15 agent persona files shipped with the great.sh Loop.
 const AGENTS: &[AgentFile] = &[
     AgentFile {
         name: "nightingale",
@@ -90,6 +90,14 @@ const AGENTS: &[AgentFile] = &[
     AgentFile {
         name: "hopper",
         content: include_str!("../../loop/agents/hopper.md"),
+    },
+    AgentFile {
+        name: "dijkstra",
+        content: include_str!("../../loop/agents/dijkstra.md"),
+    },
+    AgentFile {
+        name: "wirth",
+        content: include_str!("../../loop/agents/wirth.md"),
     },
 ];
 
@@ -256,7 +264,7 @@ fn run_install(project: bool) -> Result<()> {
     println!();
     output::header("great.sh Loop installed!");
     println!();
-    output::info("14 roles: 4 teammates + 9 subagents + 1 team lead");
+    output::info("16 roles: 4 teammates + 11 subagents + 1 team lead");
     output::info("All Claude: Opus + Sonnet + Haiku");
     println!();
     if project {
@@ -393,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_agents_count() {
-        assert_eq!(AGENTS.len(), 13);
+        assert_eq!(AGENTS.len(), 15);
     }
 
     #[test]
@@ -481,6 +489,8 @@ mod tests {
             "knuth",
             "gutenberg",
             "hopper",
+            "dijkstra",
+            "wirth",
         ];
         for name in &expected {
             assert!(

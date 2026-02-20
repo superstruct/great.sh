@@ -53,10 +53,10 @@ export function Loop() {
         {/* Heading */}
         <h2 className="font-display text-3xl md:text-4xl text-text-primary text-center mb-4">
           great loop{' '}
-          <span className="text-text-secondary">— 13 agents, one command</span>
+          <span className="text-text-secondary">— 15 agents, one command</span>
         </h2>
         <p className="text-text-secondary text-center mb-16 max-w-2xl mx-auto leading-relaxed">
-          The great.sh Loop is a 13-role AI agent orchestration methodology that
+          The great.sh Loop is a 15-role AI agent orchestration methodology that
           ships inside every great.sh install. One command configures Claude Code
           with a full team: requirements analysts, spec writers, builders, testers,
           security auditors, UX reviewers, documenters, and an observer.

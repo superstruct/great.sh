@@ -85,7 +85,7 @@ export const loopInstallOutput = `$ great loop install --project
 
   great.sh Loop -- Installing agent team
 
-  [check] 13 agent personas -> ~/.claude/agents/
+  [check] 15 agent personas -> ~/.claude/agents/
   [check] 4 commands -> ~/.claude/commands/
   [check] Agent Teams config -> ~/.claude/teams/loop/
   [check] Settings with Agent Teams enabled -> ~/.claude/settings.json
@@ -93,5 +93,5 @@ export const loopInstallOutput = `$ great loop install --project
 
   great.sh Loop installed!
 
-  14 roles: 4 teammates + 9 subagents + 1 team lead
+  16 roles: 4 teammates + 11 subagents + 1 team lead
   Usage: claude -> /loop [task description]`

@@ -1,6 +1,6 @@
 {
   "name": "loop",
-  "description": "great.sh Loop — 14-role agent team (4 teammates + 9 subagents + 1 team lead)",
+  "description": "great.sh Loop — 16-role agent team (4 teammates + 11 subagents + 1 team lead)",
   "teammates": {
     "davinci": {
       "description": "Leonardo da Vinci — Builder",

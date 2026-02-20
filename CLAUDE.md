@@ -74,7 +74,7 @@ The `loop/` directory contains the great.sh Loop — a 13-role AI agent orchestr
 ### Structure
 ```
 loop/
-├── agents/          # Agent persona definitions (13 agents)
+├── agents/          # Agent persona definitions (15 agents)
 ├── commands/        # Slash commands (/loop, /bugfix, /deploy, /discover)
 ├── teams-config.json
 └── observer-template.md
