@@ -35,6 +35,16 @@ export function Footer() {
           >
             Superstruct
           </a>
+          {' '}&middot; Part of the{' '}
+          <a
+            href="https://architecton.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-text-secondary transition-colors"
+          >
+            architecton.ai
+          </a>
+          {' '}ecosystem
         </div>
       </Container>
     </footer>

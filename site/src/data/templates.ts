@@ -5,6 +5,7 @@ export interface Template {
   agents: string[]
   mcpServers: string[]
   tools: string[]
+  source: 'architecton.ai' | 'builtin'
 }
 
 export const templates: Template[] = [
@@ -16,6 +17,7 @@ export const templates: Template[] = [
     agents: ['Claude Code', 'Codex CLI', 'Gemini CLI'],
     mcpServers: ['GitHub', 'Filesystem', 'Memory', 'Playwright', 'Brave Search'],
     tools: ['Node 22', 'TypeScript', 'gh', 'Docker', 'Starship', 'fzf', 'ripgrep'],
+    source: 'architecton.ai',
   },
   {
     name: 'AI Full Stack (Python)',
@@ -25,6 +27,7 @@ export const templates: Template[] = [
     agents: ['Claude Code', 'Codex CLI', 'Gemini CLI'],
     mcpServers: ['GitHub', 'Filesystem', 'Memory', 'PostgreSQL', 'Playwright'],
     tools: ['Python 3.12', 'uv', 'gh', 'Docker', 'Starship', 'fzf', 'ripgrep'],
+    source: 'architecton.ai',
   },
   {
     name: 'AI Data Science',
@@ -34,6 +37,7 @@ export const templates: Template[] = [
     agents: ['Claude Code', 'Gemini CLI'],
     mcpServers: ['Filesystem', 'Memory', 'PostgreSQL', 'Brave Search'],
     tools: ['Python 3.12', 'Jupyter', 'CUDA', 'uv', 'Starship'],
+    source: 'architecton.ai',
   },
   {
     name: 'AI DevOps',
@@ -43,6 +47,7 @@ export const templates: Template[] = [
     agents: ['Claude Code', 'Codex CLI'],
     mcpServers: ['AWS', 'Docker', 'Kubernetes', 'GitHub', 'Filesystem'],
     tools: ['Terraform', 'AWS CLI', 'Docker', 'kubectl', 'gh', 'Starship'],
+    source: 'architecton.ai',
   },
   {
     name: 'AI Minimal',
@@ -52,5 +57,6 @@ export const templates: Template[] = [
     agents: ['Claude Code'],
     mcpServers: ['Filesystem', 'Memory'],
     tools: ['gh', 'Starship', 'fzf', 'ripgrep'],
+    source: 'architecton.ai',
   },
 ]
