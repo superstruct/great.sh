@@ -81,3 +81,5 @@ Beta (v0.1.0). Core features work. We welcome bug reports and feedback.
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE)
+
+Copyright 2025 Superstruct Ltd
