@@ -39,9 +39,7 @@ pub fn run(args: Args) -> Result<()> {
         },
     };
 
-    let config_path_str = config_path
-        .to_str()
-        .unwrap_or_default();
+    let config_path_str = config_path.to_str().unwrap_or_default();
     let cfg = config::load(Some(config_path_str))?;
 
     output::header("great diff");

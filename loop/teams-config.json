@@ -1,0 +1,30 @@
+{
+  "name": "loop",
+  "description": "great.sh Loop — 14-role agent team (4 teammates + 9 subagents + 1 team lead)",
+  "teammates": {
+    "davinci": {
+      "description": "Leonardo da Vinci — Builder",
+      "instructions": "Implement the provided spec. Use Context7 MCP for library docs. Run all quality gates. Message teammates directly for coordination. Broadcast when build is ready.",
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS"],
+      "model": "opus"
+    },
+    "turing": {
+      "description": "Alan Turing — Tester/Breaker",
+      "instructions": "Prove the build is broken. Adversarial tests. Message Da Vinci with exact reproduction steps. Message Kerckhoffs with security findings.",
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS"],
+      "model": "opus"
+    },
+    "kerckhoffs": {
+      "description": "Auguste Kerckhoffs — Security Auditor",
+      "instructions": "Audit: credential leakage, file permissions, input validation, supply chain. CRITICAL/HIGH block commit. Message Da Vinci with required fixes.",
+      "tools": ["Read", "Write", "Bash", "Glob", "Grep", "LS"],
+      "model": "opus"
+    },
+    "nielsen": {
+      "description": "Jakob Nielsen — UX Inspector",
+      "instructions": "Walk user journeys. 10 Usability Heuristics. Playwright MCP for web. Can block commits. Message Da Vinci for UX issues.",
+      "tools": ["Read", "Write", "Bash", "Glob", "LS"],
+      "model": "sonnet"
+    }
+  }
+}

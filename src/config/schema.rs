@@ -293,7 +293,9 @@ required = ["VALID_KEY", "invalid-key-with-dashes"]
 "#;
         let config: GreatConfig = toml::from_str(toml_str).unwrap();
         let messages = config.validate();
-        let has_error = messages.iter().any(|m| matches!(m, ConfigMessage::Error(_)));
+        let has_error = messages
+            .iter()
+            .any(|m| matches!(m, ConfigMessage::Error(_)));
         assert!(has_error, "expected an error for invalid secret name");
     }
 
@@ -313,7 +315,10 @@ required = ["ANTHROPIC_API_KEY"]
 "#;
         let config: GreatConfig = toml::from_str(toml_str).unwrap();
         let messages = config.validate();
-        assert!(messages.is_empty(), "expected no warnings or errors for valid config");
+        assert!(
+            messages.is_empty(),
+            "expected no warnings or errors for valid config"
+        );
     }
 
     #[test]
@@ -385,10 +390,7 @@ extra_tools = ["build-essential"]
             platform.macos.unwrap().extra_tools.unwrap(),
             vec!["coreutils", "gnu-sed"]
         );
-        assert_eq!(
-            platform.wsl2.unwrap().extra_tools.unwrap(),
-            vec!["wslu"]
-        );
+        assert_eq!(platform.wsl2.unwrap().extra_tools.unwrap(), vec!["wslu"]);
         assert_eq!(
             platform.linux.unwrap().extra_tools.unwrap(),
             vec!["build-essential"]

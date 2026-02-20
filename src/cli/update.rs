@@ -40,8 +40,8 @@ async fn check_for_update() -> Result<()> {
         Ok(latest) => {
             let current = semver::Version::parse(CURRENT_VERSION)
                 .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
-            let remote = semver::Version::parse(&latest)
-                .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
+            let remote =
+                semver::Version::parse(&latest).unwrap_or_else(|_| semver::Version::new(0, 0, 0));
 
             if remote > current {
                 output::warning(&format!(
@@ -76,10 +76,9 @@ async fn self_update() -> Result<()> {
         }
     };
 
-    let current = semver::Version::parse(CURRENT_VERSION)
-        .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
-    let remote = semver::Version::parse(&latest)
-        .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
+    let current =
+        semver::Version::parse(CURRENT_VERSION).unwrap_or_else(|_| semver::Version::new(0, 0, 0));
+    let remote = semver::Version::parse(&latest).unwrap_or_else(|_| semver::Version::new(0, 0, 0));
 
     if remote <= current {
         output::success(&format!("Already up to date ({})", CURRENT_VERSION));
@@ -117,10 +116,7 @@ async fn self_update() -> Result<()> {
         return Ok(());
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .context("failed to read download")?;
+    let bytes = response.bytes().await.context("failed to read download")?;
 
     spinner.finish_and_clear();
 
@@ -140,8 +136,7 @@ async fn self_update() -> Result<()> {
 
     // Atomic rename
     let backup_path = current_exe.with_extension("bak");
-    std::fs::rename(&current_exe, &backup_path)
-        .context("failed to backup current binary")?;
+    std::fs::rename(&current_exe, &backup_path).context("failed to backup current binary")?;
 
     match std::fs::rename(&temp_path, &current_exe) {
         Ok(()) => {
@@ -199,13 +194,12 @@ async fn fetch_latest_version() -> Result<String> {
 fn release_asset_name() -> String {
     let info = platform::detect_platform_info();
     let (os, arch_str) = match (&info.platform, info.platform.arch()) {
-        (platform::Platform::MacOS { .. }, platform::Architecture::Aarch64) => {
-            ("macos", "aarch64")
-        }
+        (platform::Platform::MacOS { .. }, platform::Architecture::Aarch64) => ("macos", "aarch64"),
         (platform::Platform::MacOS { .. }, _) => ("macos", "x86_64"),
-        (platform::Platform::Linux { .. } | platform::Platform::Wsl { .. }, platform::Architecture::Aarch64) => {
-            ("linux", "aarch64")
-        }
+        (
+            platform::Platform::Linux { .. } | platform::Platform::Wsl { .. },
+            platform::Architecture::Aarch64,
+        ) => ("linux", "aarch64"),
         _ => ("linux", "x86_64"),
     };
     format!("great-{}-{}", os, arch_str)

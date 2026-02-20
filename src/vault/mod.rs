@@ -169,7 +169,8 @@ impl SecretProvider for KeychainProvider {
     }
 
     fn is_available(&self) -> bool {
-        crate::platform::command_exists("security") || crate::platform::command_exists("secret-tool")
+        crate::platform::command_exists("security")
+            || crate::platform::command_exists("secret-tool")
     }
 
     fn get(&self, key: &str) -> Result<Option<String>> {

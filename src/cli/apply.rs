@@ -6,9 +6,9 @@ use clap::Args as ClapArgs;
 
 use crate::cli::output;
 use crate::config;
-use crate::platform::{self, command_exists};
 use crate::platform::package_manager::{self, PackageManager};
 use crate::platform::runtime::{MiseManager, ProvisionAction};
+use crate::platform::{self, command_exists};
 
 /// Special install instructions for CLI tools that can't use a simple
 /// `brew install <name>` or `apt install <name>`.
@@ -369,8 +369,8 @@ pub fn run(args: Args) -> Result<()> {
 
             let mcp_json_path = Path::new(".mcp.json");
             let mut mcp_config: HashMap<String, serde_json::Value> = if mcp_json_path.exists() {
-                let content = std::fs::read_to_string(mcp_json_path)
-                    .context("failed to read .mcp.json")?;
+                let content =
+                    std::fs::read_to_string(mcp_json_path).context("failed to read .mcp.json")?;
                 serde_json::from_str(&content).unwrap_or_default()
             } else {
                 HashMap::new()
@@ -399,10 +399,7 @@ pub fn run(args: Args) -> Result<()> {
                 }
 
                 if args.dry_run {
-                    output::info(&format!(
-                        "  {} — would configure ({})",
-                        name, mcp.command
-                    ));
+                    output::info(&format!("  {} — would configure ({})", name, mcp.command));
                     continue;
                 }
 
@@ -484,8 +481,10 @@ pub fn run(args: Args) -> Result<()> {
     // 6. Check secrets
     if let Some(secrets) = &cfg.secrets {
         if let Some(required) = &secrets.required {
-            let missing: Vec<&String> =
-                required.iter().filter(|k| std::env::var(k).is_err()).collect();
+            let missing: Vec<&String> = required
+                .iter()
+                .filter(|k| std::env::var(k).is_err())
+                .collect();
             if !missing.is_empty() {
                 output::header("Secrets");
                 for key in &missing {
@@ -502,15 +501,18 @@ pub fn run(args: Args) -> Result<()> {
     // 7. Apply platform-specific overrides
     if let Some(platform_cfg) = &cfg.platform {
         let override_tools = match &info.platform {
-            platform::Platform::MacOS { .. } => {
-                platform_cfg.macos.as_ref().and_then(|o| o.extra_tools.as_ref())
-            }
-            platform::Platform::Wsl { .. } => {
-                platform_cfg.wsl2.as_ref().and_then(|o| o.extra_tools.as_ref())
-            }
-            platform::Platform::Linux { .. } => {
-                platform_cfg.linux.as_ref().and_then(|o| o.extra_tools.as_ref())
-            }
+            platform::Platform::MacOS { .. } => platform_cfg
+                .macos
+                .as_ref()
+                .and_then(|o| o.extra_tools.as_ref()),
+            platform::Platform::Wsl { .. } => platform_cfg
+                .wsl2
+                .as_ref()
+                .and_then(|o| o.extra_tools.as_ref()),
+            platform::Platform::Linux { .. } => platform_cfg
+                .linux
+                .as_ref()
+                .and_then(|o| o.extra_tools.as_ref()),
             _ => None,
         };
 
@@ -530,11 +532,7 @@ pub fn run(args: Args) -> Result<()> {
                     let mut installed = false;
                     for mgr in &managers {
                         if mgr.install(tool, None).is_ok() {
-                            output::success(&format!(
-                                "  {} — installed via {}",
-                                tool,
-                                mgr.name()
-                            ));
+                            output::success(&format!("  {} — installed via {}", tool, mgr.name()));
                             installed = true;
                             break;
                         }

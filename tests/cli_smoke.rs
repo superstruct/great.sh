@@ -271,7 +271,10 @@ fn sync_pull_no_data() {
         .args(["sync", "pull"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("No sync data found").or(predicate::str::contains("Cloud sync")));
+        .stderr(
+            predicate::str::contains("No sync data found")
+                .or(predicate::str::contains("Cloud sync")),
+        );
 }
 
 // -----------------------------------------------------------------------

@@ -153,9 +153,8 @@ fn run_apply(name: &str) -> Result<()> {
         output::info("Existing great.toml found — merging template.");
 
         let existing = config::load(Some("great.toml"))?;
-        let template_config: crate::config::schema::GreatConfig =
-            toml::from_str(&template_content)
-                .context(format!("failed to parse template '{}'", name))?;
+        let template_config: crate::config::schema::GreatConfig = toml::from_str(&template_content)
+            .context(format!("failed to parse template '{}'", name))?;
 
         let merged = merge_configs(existing, template_config);
 

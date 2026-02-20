@@ -35,3 +35,9 @@ dist-ssr
 
 # Observer reports
 .observer/
+
+# Claude Code agent memory
+.claude/
+
+# great.sh Loop working state
+.tasks/

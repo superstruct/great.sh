@@ -135,10 +135,7 @@ pub fn run(args: Args) -> Result<()> {
                 if cmd_available {
                     output::success(&format!("  {} ({})", name, mcp.command));
                 } else {
-                    output::error(&format!(
-                        "  {} ({} — not found)",
-                        name, mcp.command
-                    ));
+                    output::error(&format!("  {} ({} — not found)", name, mcp.command));
                 }
             }
         }
@@ -211,14 +208,8 @@ fn print_tool_status(
 ) {
     if installed {
         let ver_info = actual_version.unwrap_or("installed");
-        output::success(&format!(
-            "  {} {} ({})",
-            name, declared_version, ver_info
-        ));
+        output::success(&format!("  {} {} ({})", name, declared_version, ver_info));
     } else {
-        output::error(&format!(
-            "  {} {} — not installed",
-            name, declared_version
-        ));
+        output::error(&format!("  {} {} — not installed", name, declared_version));
     }
 }

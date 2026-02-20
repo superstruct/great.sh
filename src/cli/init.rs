@@ -84,7 +84,6 @@ pub fn run(args: Args) -> Result<()> {
         runtimes.insert("rust".to_string(), "stable".to_string());
     }
 
-
     if prompt_yes_no("Install Deno?", false)? {
         runtimes.insert("deno".to_string(), "latest".to_string());
     }
@@ -370,7 +369,10 @@ mod tests {
         // Unknown template should not create a file, and should return Ok
         let result = init_from_template("nonexistent-template", &config_path);
         assert!(result.is_ok());
-        assert!(!config_path.exists(), "file should not be created for unknown template");
+        assert!(
+            !config_path.exists(),
+            "file should not be created for unknown template"
+        );
     }
 
     #[test]
@@ -415,10 +417,22 @@ mod tests {
     fn test_templates_parse_as_valid_config() {
         // All embedded templates must deserialize into a valid GreatConfig
         let templates = [
-            ("ai-fullstack-ts", include_str!("../../templates/ai-fullstack-ts.toml")),
-            ("ai-fullstack-py", include_str!("../../templates/ai-fullstack-py.toml")),
-            ("ai-minimal", include_str!("../../templates/ai-minimal.toml")),
-            ("saas-multi-tenant", include_str!("../../templates/saas-multi-tenant.toml")),
+            (
+                "ai-fullstack-ts",
+                include_str!("../../templates/ai-fullstack-ts.toml"),
+            ),
+            (
+                "ai-fullstack-py",
+                include_str!("../../templates/ai-fullstack-py.toml"),
+            ),
+            (
+                "ai-minimal",
+                include_str!("../../templates/ai-minimal.toml"),
+            ),
+            (
+                "saas-multi-tenant",
+                include_str!("../../templates/saas-multi-tenant.toml"),
+            ),
         ];
         for (name, content) in &templates {
             let config: GreatConfig = toml::from_str(content)

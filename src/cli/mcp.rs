@@ -129,8 +129,7 @@ fn run_add(name: &str) -> Result<()> {
     }
 
     // Use toml_edit for format-preserving modification
-    let content = std::fs::read_to_string(&config_path)
-        .context("failed to read great.toml")?;
+    let content = std::fs::read_to_string(&config_path).context("failed to read great.toml")?;
     let mut doc: toml_edit::DocumentMut = content
         .parse()
         .context("failed to parse great.toml for editing")?;
@@ -156,8 +155,7 @@ fn run_add(name: &str) -> Result<()> {
     }
 
     // Write back
-    std::fs::write(&config_path, doc.to_string())
-        .context("failed to write great.toml")?;
+    std::fs::write(&config_path, doc.to_string()).context("failed to write great.toml")?;
 
     output::success(&format!("Added MCP server '{}' to great.toml", name));
     output::info("Run `great apply` to configure it in .mcp.json.");

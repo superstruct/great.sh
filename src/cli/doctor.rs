@@ -3,8 +3,8 @@ use clap::Args as ClapArgs;
 
 use crate::cli::output;
 use crate::config;
-use crate::platform::{self, command_exists, Platform};
 use crate::platform::package_manager;
+use crate::platform::{self, command_exists, Platform};
 
 /// Arguments for the `great doctor` subcommand.
 #[derive(ClapArgs)]
@@ -92,7 +92,11 @@ pub fn run(args: Args) -> Result<()> {
                     let mut ok = false;
                     for mgr in &managers {
                         if mgr.install(brew_name, None).is_ok() && command_exists(binary) {
-                            output::success(&format!("  {} — installed via {}", binary, mgr.name()));
+                            output::success(&format!(
+                                "  {} — installed via {}",
+                                binary,
+                                mgr.name()
+                            ));
                             ok = true;
                             fixed += 1;
                             break;
@@ -255,7 +259,10 @@ fn check_platform(result: &mut DiagnosticResult) {
                 platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
             );
             if caps.has_homebrew {
-                pass(result, "Homebrew (Linuxbrew): installed (primary package manager)");
+                pass(
+                    result,
+                    "Homebrew (Linuxbrew): installed (primary package manager)",
+                );
             } else if is_ubuntu_debian {
                 fail(
                     result,
@@ -289,10 +296,20 @@ fn check_essential_tools(result: &mut DiagnosticResult) {
 
     // (binary, display name, brew formula, install hint)
     let essential: &[(&str, &str, &str, &str)] = &[
-        ("git", "Git version control", "git", "https://git-scm.com/downloads"),
+        (
+            "git",
+            "Git version control",
+            "git",
+            "https://git-scm.com/downloads",
+        ),
         ("curl", "curl HTTP client", "curl", "brew install curl"),
         ("gh", "GitHub CLI", "gh", "brew install gh"),
-        ("node", "Node.js runtime", "node", "https://nodejs.org or use mise"),
+        (
+            "node",
+            "Node.js runtime",
+            "node",
+            "https://nodejs.org or use mise",
+        ),
         ("npm", "npm package manager", "npm", "Comes with Node.js"),
         ("pnpm", "pnpm package manager", "pnpm", "brew install pnpm"),
         ("cargo", "Rust toolchain", "rustup", "https://rustup.rs"),
@@ -395,10 +412,7 @@ fn check_config(result: &mut DiagnosticResult) {
 
     match config::discover_config() {
         Ok(path) => {
-            pass(
-                result,
-                &format!("great.toml: found at {}", path.display()),
-            );
+            pass(result, &format!("great.toml: found at {}", path.display()));
             match config::load(Some(path.to_str().unwrap_or_default())) {
                 Ok(cfg) => {
                     pass(result, "great.toml: valid syntax");

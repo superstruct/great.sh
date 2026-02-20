@@ -50,10 +50,7 @@ fn run_login() -> Result<()> {
     println!();
 
     let providers = vault::available_providers();
-    let writable: Vec<_> = providers
-        .iter()
-        .filter(|p| p.name() != "env")
-        .collect();
+    let writable: Vec<_> = providers.iter().filter(|p| p.name() != "env").collect();
 
     if writable.is_empty() {
         output::error("No writable secret provider available.");
@@ -98,7 +95,11 @@ fn run_login() -> Result<()> {
     println!();
     output::info("Available providers:");
     for p in &providers {
-        let status = if p.is_available() { "available" } else { "not available" };
+        let status = if p.is_available() {
+            "available"
+        } else {
+            "not available"
+        };
         output::info(&format!("  {} — {}", p.name(), status));
     }
 
@@ -270,8 +271,7 @@ fn import_from_dotenv(path: &str) -> Result<()> {
     output::header(&format!("Importing from {}", path));
     println!();
 
-    let file = std::fs::File::open(path)
-        .context(format!("failed to open {}", path))?;
+    let file = std::fs::File::open(path).context(format!("failed to open {}", path))?;
     let reader = std::io::BufReader::new(file);
 
     let providers = vault::available_providers();

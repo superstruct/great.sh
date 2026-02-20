@@ -71,12 +71,14 @@ fn run_pull(apply: bool) -> Result<()> {
             output::info(&format!("Found sync blob: {} bytes", data.len()));
 
             // Verify the blob is valid TOML before applying
-            let content = String::from_utf8(data.clone())
-                .context("sync blob is not valid UTF-8")?;
+            let content =
+                String::from_utf8(data.clone()).context("sync blob is not valid UTF-8")?;
 
             if let Err(e) = toml::from_str::<crate::config::schema::GreatConfig>(&content) {
                 output::error(&format!("Sync blob contains invalid config: {}", e));
-                output::info("The stored config may be corrupted. Run `great sync push` to re-sync.");
+                output::info(
+                    "The stored config may be corrupted. Run `great sync push` to re-sync.",
+                );
                 return Ok(());
             }
 
@@ -90,12 +92,14 @@ fn run_pull(apply: bool) -> Result<()> {
                     let backup = config_path.with_extension("toml.bak");
                     std::fs::copy(&config_path, &backup)
                         .context("failed to backup existing great.toml")?;
-                    output::info(&format!("Backed up existing config to {}", backup.display()));
+                    output::info(&format!(
+                        "Backed up existing config to {}",
+                        backup.display()
+                    ));
                 }
 
                 // Write the pulled data
-                std::fs::write(&config_path, &content)
-                    .context("failed to write great.toml")?;
+                std::fs::write(&config_path, &content).context("failed to write great.toml")?;
 
                 output::success(&format!("Applied sync data to {}", config_path.display()));
                 output::info("Run `great apply` to provision the restored environment.");
@@ -106,7 +110,10 @@ fn run_pull(apply: bool) -> Result<()> {
                 // Show first 40 lines as preview
                 for (i, line) in content.lines().enumerate() {
                     if i >= 40 {
-                        output::info(&format!("  ... ({} more lines)", content.lines().count() - 40));
+                        output::info(&format!(
+                            "  ... ({} more lines)",
+                            content.lines().count() - 40
+                        ));
                         break;
                     }
                     println!("  {}", line);

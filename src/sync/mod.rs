@@ -30,8 +30,8 @@ pub fn sync_dir() -> Result<PathBuf> {
 
 /// Export current config as bytes for sync.
 pub fn export_config(config_path: &Path) -> Result<Vec<u8>> {
-    let content = std::fs::read(config_path)
-        .context(format!("failed to read {}", config_path.display()))?;
+    let content =
+        std::fs::read(config_path).context(format!("failed to read {}", config_path.display()))?;
     Ok(content)
 }
 
@@ -46,8 +46,7 @@ pub fn import_config(data: &[u8], config_path: &Path) -> Result<()> {
 /// Save a sync blob to local storage.
 pub fn save_local(data: &[u8]) -> Result<PathBuf> {
     let dir = sync_dir()?;
-    std::fs::create_dir_all(&dir)
-        .context("failed to create sync directory")?;
+    std::fs::create_dir_all(&dir).context("failed to create sync directory")?;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -57,13 +56,11 @@ pub fn save_local(data: &[u8]) -> Result<PathBuf> {
     let filename = format!("sync-{}.bin", timestamp);
     let path = dir.join(&filename);
 
-    std::fs::write(&path, data)
-        .context("failed to write sync blob")?;
+    std::fs::write(&path, data).context("failed to write sync blob")?;
 
     // Also update the "latest" symlink/copy
     let latest = dir.join("latest.bin");
-    std::fs::write(&latest, data)
-        .context("failed to write latest sync blob")?;
+    std::fs::write(&latest, data).context("failed to write latest sync blob")?;
 
     Ok(path)
 }
@@ -77,8 +74,7 @@ pub fn load_local() -> Result<Option<Vec<u8>>> {
         return Ok(None);
     }
 
-    let data = std::fs::read(&latest)
-        .context("failed to read latest sync blob")?;
+    let data = std::fs::read(&latest).context("failed to read latest sync blob")?;
     Ok(Some(data))
 }
 
@@ -107,7 +103,10 @@ mod tests {
         std::fs::write(&file_path, content).expect("failed to write test file");
 
         let result = export_config(&file_path);
-        assert!(result.is_ok(), "export_config should succeed for existing file");
+        assert!(
+            result.is_ok(),
+            "export_config should succeed for existing file"
+        );
         assert_eq!(result.unwrap(), content);
     }
 

@@ -34,8 +34,8 @@ impl McpJsonConfig {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let content = std::fs::read_to_string(path)
-            .context(format!("failed to read {}", path.display()))?;
+        let content =
+            std::fs::read_to_string(path).context(format!("failed to read {}", path.display()))?;
         let config: Self = serde_json::from_str(&content)
             .context(format!("failed to parse {}", path.display()))?;
         Ok(config)
@@ -44,8 +44,7 @@ impl McpJsonConfig {
     /// Save this config as pretty-printed JSON to the given path.
     #[allow(dead_code)]
     pub fn save(&self, path: &Path) -> Result<()> {
-        let json =
-            serde_json::to_string_pretty(self).context("failed to serialize MCP config")?;
+        let json = serde_json::to_string_pretty(self).context("failed to serialize MCP config")?;
         std::fs::write(path, json).context(format!("failed to write {}", path.display()))?;
         Ok(())
     }

@@ -2,6 +2,7 @@ pub mod apply;
 pub mod diff;
 pub mod doctor;
 pub mod init;
+pub mod loop_cmd;
 pub mod mcp;
 pub mod output;
 pub mod status;
@@ -63,4 +64,7 @@ pub enum Command {
 
     /// Manage configuration templates
     Template(template::Args),
+
+    /// Install and manage the great.sh Loop agent team
+    Loop(loop_cmd::Args),
 }
