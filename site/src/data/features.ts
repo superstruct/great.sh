@@ -14,7 +14,7 @@ export const features: Feature[] = [
   {
     title: 'AI Agent Orchestration',
     description:
-      'Claude Code as orchestrator with Codex, Gemini, and other AI agents configured as MCP servers. Multi-agent development out of the box.',
+      'The great.sh Loop: 13 specialized AI agents installed into Claude Code with one command. Requirements, specs, builds, tests, security audits, UX reviews, docs, and deploys — orchestrated as a team. Run great loop install to set it up.',
     icon: 'brain',
   },
   {

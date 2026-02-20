@@ -29,6 +29,12 @@ const steps = [
     description: 'Push your encrypted config to the cloud. Pull it on any new machine.',
     command: 'great sync push',
   },
+  {
+    number: '05',
+    title: 'Start the Loop',
+    description: 'Install the 13-agent team into Claude Code. Type /loop and describe your task.',
+    command: 'great loop install --project',
+  },
 ]
 
 export function HowItWorks() {
@@ -36,7 +42,7 @@ export function HowItWorks() {
     <AnimatedSection id="how-it-works">
       <Container>
         <h2 className="font-display text-3xl md:text-4xl text-text-primary text-center mb-4">
-          Zero to hero in four steps
+          Zero to hero in five steps
         </h2>
         <p className="text-text-secondary text-center mb-16 max-w-xl mx-auto">
           From blank machine to fully configured AI dev environment.

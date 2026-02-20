@@ -37,6 +37,15 @@ export const comparisonData: ComparisonRow[] = [
     manual: true,
   },
   {
+    feature: 'AI agent orchestration loop',
+    great: true,
+    chezmoi: false,
+    mise: false,
+    nix: false,
+    mcpm: false,
+    manual: false,
+  },
+  {
     feature: 'MCP server management',
     great: true,
     chezmoi: false,

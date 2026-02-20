@@ -47,7 +47,7 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.4 }}
             className="text-text-tertiary text-base md:text-lg mb-12 max-w-2xl"
           >
-            One command. Fully configured. Cloud-synced. Open source.
+            One command. 13 AI agents. Fully configured. Open source.
           </motion.p>
 
           <motion.div
