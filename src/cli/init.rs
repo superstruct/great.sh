@@ -102,23 +102,21 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     // Package managers
-    if runtimes.contains_key("node") {
-        if prompt_yes_no("Install pnpm (fast Node.js package manager)?", true)? {
-            cli_tools.insert("pnpm".to_string(), "latest".to_string());
-        }
+    if runtimes.contains_key("node")
+        && prompt_yes_no("Install pnpm (fast Node.js package manager)?", true)?
+    {
+        cli_tools.insert("pnpm".to_string(), "latest".to_string());
     }
-    if runtimes.contains_key("python") {
-        if prompt_yes_no("Install uv (fast Python package manager)?", true)? {
-            cli_tools.insert("uv".to_string(), "latest".to_string());
-        }
+    if runtimes.contains_key("python")
+        && prompt_yes_no("Install uv (fast Python package manager)?", true)?
+    {
+        cli_tools.insert("uv".to_string(), "latest".to_string());
     }
 
     // Shell prompt
     if prompt_yes_no("Install Starship prompt?", false)? {
         cli_tools.insert("starship".to_string(), "latest".to_string());
-        // TODO: After install, run starship configuration:
-        //   - Generate ~/.config/starship.toml with great.sh preset
-        //   - Add `eval "$(starship init bash)"` (or zsh/fish) to shell profile
+        // Starship shell config is handled by `great apply` after install
     }
 
     // Cloud CLIs
@@ -128,8 +126,7 @@ pub fn run(args: Args) -> Result<()> {
 
     if prompt_yes_no("Install AWS CLI + CDK?", false)? {
         cli_tools.insert("aws".to_string(), "latest".to_string());
-        // TODO: CDK is installed via npm globally: npm install -g aws-cdk
-        // Need to handle this as a special case in apply since it's an npm package
+        // CDK install is handled via tool_install_spec in apply (npm install -g aws-cdk)
         cli_tools.insert("cdk".to_string(), "latest".to_string());
     }
     if prompt_yes_no("Install Azure CLI?", false)? {

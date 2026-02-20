@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum GreatError {
     #[error("configuration error: {0}")]
     Config(String),

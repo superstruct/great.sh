@@ -7,8 +7,100 @@ use clap::Args as ClapArgs;
 use crate::cli::output;
 use crate::config;
 use crate::platform::{self, command_exists};
-use crate::platform::package_manager;
+use crate::platform::package_manager::{self, PackageManager};
 use crate::platform::runtime::{MiseManager, ProvisionAction};
+
+/// Special install instructions for CLI tools that can't use a simple
+/// `brew install <name>` or `apt install <name>`.
+struct ToolInstallSpec {
+    /// Homebrew formula name (if different from the tool name in great.toml).
+    brew_name: Option<&'static str>,
+    /// npm package name for `npm install -g`.
+    npm_package: Option<&'static str>,
+    /// The binary name to check on PATH after install.
+    binary_name: &'static str,
+}
+
+/// Look up special install instructions for a CLI tool.
+fn tool_install_spec(name: &str) -> Option<ToolInstallSpec> {
+    match name {
+        "cdk" => Some(ToolInstallSpec {
+            brew_name: None,
+            npm_package: Some("aws-cdk"),
+            binary_name: "cdk",
+        }),
+        "aws" => Some(ToolInstallSpec {
+            brew_name: Some("awscli"),
+            npm_package: None,
+            binary_name: "aws",
+        }),
+        "az" => Some(ToolInstallSpec {
+            brew_name: Some("azure-cli"),
+            npm_package: None,
+            binary_name: "az",
+        }),
+        "gcloud" => Some(ToolInstallSpec {
+            brew_name: Some("google-cloud-sdk"),
+            npm_package: None,
+            binary_name: "gcloud",
+        }),
+        "pnpm" => Some(ToolInstallSpec {
+            brew_name: Some("pnpm"),
+            npm_package: Some("pnpm"),
+            binary_name: "pnpm",
+        }),
+        "uv" => Some(ToolInstallSpec {
+            brew_name: Some("uv"),
+            npm_package: None,
+            binary_name: "uv",
+        }),
+        "starship" => Some(ToolInstallSpec {
+            brew_name: Some("starship"),
+            npm_package: None,
+            binary_name: "starship",
+        }),
+        "bw" | "bitwarden-cli" => Some(ToolInstallSpec {
+            brew_name: None,
+            npm_package: Some("@bitwarden/cli"),
+            binary_name: "bw",
+        }),
+        _ => None,
+    }
+}
+
+/// Try to install a tool using its special install spec.
+/// Returns Ok(Some(method)) on success, Ok(None) if no method worked.
+fn install_with_spec(
+    spec: &ToolInstallSpec,
+    managers: &[Box<dyn PackageManager>],
+    version_opt: Option<&str>,
+) -> Result<Option<String>> {
+    // Try npm first if npm_package is specified
+    if let Some(npm_pkg) = spec.npm_package {
+        for mgr in managers {
+            if mgr.name() == "npm"
+                && mgr.install(npm_pkg, version_opt).is_ok()
+                && command_exists(spec.binary_name)
+            {
+                return Ok(Some("npm".to_string()));
+            }
+        }
+    }
+
+    // Try brew with special formula name
+    if let Some(brew_name) = spec.brew_name {
+        for mgr in managers {
+            if mgr.name() == "homebrew"
+                && mgr.install(brew_name, version_opt).is_ok()
+                && command_exists(spec.binary_name)
+            {
+                return Ok(Some("homebrew".to_string()));
+            }
+        }
+    }
+
+    Ok(None)
+}
 
 /// Apply the configuration from great.toml — install tools, configure MCP servers,
 /// and resolve secrets.
@@ -193,28 +285,19 @@ pub fn run(args: Args) -> Result<()> {
             println!();
         }
 
-        // 4. Install CLI tools via package managers
-        //
-        // TODO: Some CLI tools need special install paths that differ from
-        // a simple `brew install <name>` / `apt install <name>`:
-        //   - cdk:    `npm install -g aws-cdk`
-        //   - az:     `brew install azure-cli` (name differs) or curl installer on Linux
-        //   - gcloud: `brew install google-cloud-sdk` or snap/curl on Linux
-        //   - aws:    `brew install awscli` (name differs) or curl installer on Linux
-        //   - pnpm:   `npm install -g pnpm` or `brew install pnpm`
-        //   - uv:     `brew install uv` or `pip install uv` or curl installer
-        //   - starship: `brew install starship` (then needs shell init config)
-        //   - bitwarden-cli: `npm install -g @bitwarden/cli`
-        //
-        // Consider adding a tool-name-to-install-command mapping table, or
-        // an `install_hint` field in the schema for tools that need it.
+        // 4. Install CLI tools via package managers (with special-case handling)
         if let Some(cli_tools) = &tools.cli {
             if !cli_tools.is_empty() {
                 output::header("CLI Tools");
                 let managers = package_manager::available_managers();
 
                 for (name, version) in cli_tools {
-                    if command_exists(name) {
+                    // Check binary name — some tools have different binary vs config names
+                    let check_name = tool_install_spec(name)
+                        .map(|s| s.binary_name)
+                        .unwrap_or(name.as_str());
+
+                    if command_exists(check_name) {
                         output::success(&format!("  {} — already installed", name));
                         continue;
                     }
@@ -224,26 +307,46 @@ pub fn run(args: Args) -> Result<()> {
                         continue;
                     }
 
-                    // Try to install via available package managers
                     let version_opt = if version == "latest" {
                         None
                     } else {
                         Some(version.as_str())
                     };
-                    let mut installed = false;
 
-                    for mgr in &managers {
-                        match mgr.install(name, version_opt) {
-                            Ok(()) => {
+                    // Try special install spec first
+                    let mut installed = false;
+                    if let Some(spec) = tool_install_spec(name) {
+                        match install_with_spec(&spec, &managers, version_opt) {
+                            Ok(Some(method)) => {
                                 output::success(&format!(
-                                    "  {} — installed via {}",
-                                    name,
-                                    mgr.name()
+                                    "  {} — installed via {} (special)",
+                                    name, method
                                 ));
                                 installed = true;
-                                break;
                             }
-                            Err(_) => continue, // Try next manager
+                            Ok(None) => {} // Fall through to generic install
+                            Err(e) => {
+                                output::error(&format!("  {} — install error: {}", name, e));
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Fall back to generic package manager install
+                    if !installed {
+                        for mgr in &managers {
+                            match mgr.install(name, version_opt) {
+                                Ok(()) => {
+                                    output::success(&format!(
+                                        "  {} — installed via {}",
+                                        name,
+                                        mgr.name()
+                                    ));
+                                    installed = true;
+                                    break;
+                                }
+                                Err(_) => continue,
+                            }
                         }
                     }
 
@@ -347,18 +450,17 @@ pub fn run(args: Args) -> Result<()> {
             } else {
                 output::header("Bitwarden CLI");
                 output::info("Secrets provider is bitwarden — installing bw CLI...");
-                // TODO: Try npm install -g @bitwarden/cli first, then brew/apt fallback
                 let managers = package_manager::available_managers();
-                let mut installed = false;
-                for mgr in &managers {
-                    if mgr.install("@bitwarden/cli", None).is_ok() {
-                        output::success(&format!("  bw — installed via {}", mgr.name()));
-                        installed = true;
-                        break;
+                let spec = tool_install_spec("bw").expect("bw has install spec");
+                match install_with_spec(&spec, &managers, None) {
+                    Ok(Some(method)) => {
+                        output::success(&format!("  bw — installed via {}", method));
                     }
-                }
-                if !installed {
-                    output::error("  bw — could not install. Install manually: npm install -g @bitwarden/cli");
+                    _ => {
+                        output::error(
+                            "  bw — could not install. Install manually: npm install -g @bitwarden/cli",
+                        );
+                    }
                 }
                 println!();
             }
@@ -366,13 +468,18 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     // 5c. Configure Starship prompt if starship is in CLI tools
-    // TODO: After installing starship, we should also:
-    //   - Generate ~/.config/starship.toml with a great.sh preset
-    //   - Detect the user's shell and add the init line to their profile:
-    //     bash:  eval "$(starship init bash)"  -> ~/.bashrc
-    //     zsh:   eval "$(starship init zsh)"   -> ~/.zshrc
-    //     fish:  starship init fish | source   -> ~/.config/fish/config.fish
-    //   - This requires a new `configure_starship()` helper in platform/
+    if command_exists("starship") {
+        let has_starship_in_config = cfg
+            .tools
+            .as_ref()
+            .and_then(|t| t.cli.as_ref())
+            .map(|cli| cli.contains_key("starship"))
+            .unwrap_or(false);
+
+        if has_starship_in_config {
+            configure_starship(args.dry_run);
+        }
+    }
 
     // 6. Check secrets
     if let Some(secrets) = &cfg.secrets {
@@ -449,6 +556,104 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Configure Starship prompt: generate config file and add shell init lines.
+fn configure_starship(dry_run: bool) {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return,
+    };
+
+    // 1. Generate ~/.config/starship.toml if it doesn't exist
+    let starship_config = home.join(".config").join("starship.toml");
+    if !starship_config.exists() {
+        if dry_run {
+            output::info("  starship — would create ~/.config/starship.toml");
+        } else {
+            let preset = r#"# great.sh starship preset
+format = "$all"
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[✗](bold red)"
+
+[directory]
+truncation_length = 3
+
+[git_branch]
+symbol = " "
+
+[nodejs]
+symbol = " "
+
+[python]
+symbol = " "
+
+[rust]
+symbol = " "
+"#;
+            if let Some(parent) = starship_config.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(&starship_config, preset) {
+                Ok(()) => output::success("  starship — created ~/.config/starship.toml"),
+                Err(e) => output::error(&format!("  starship — failed to write config: {}", e)),
+            }
+        }
+    }
+
+    // 2. Add shell init line to the user's shell profile
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    let (profile_path, init_line) = if shell.contains("zsh") {
+        (home.join(".zshrc"), "eval \"$(starship init zsh)\"")
+    } else if shell.contains("fish") {
+        (
+            home.join(".config").join("fish").join("config.fish"),
+            "starship init fish | source",
+        )
+    } else {
+        // Default to bash
+        (home.join(".bashrc"), "eval \"$(starship init bash)\"")
+    };
+
+    // Check if init line already exists
+    let already_configured = profile_path
+        .exists()
+        .then(|| std::fs::read_to_string(&profile_path).unwrap_or_default())
+        .map(|content| content.contains("starship init"))
+        .unwrap_or(false);
+
+    if already_configured {
+        output::success("  starship — shell init already configured");
+    } else if dry_run {
+        output::info(&format!(
+            "  starship — would add init to {}",
+            profile_path.display()
+        ));
+    } else {
+        let line = format!("\n# Added by great.sh\n{}\n", init_line);
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&profile_path)
+        {
+            Ok(mut f) => {
+                use std::io::Write;
+                if f.write_all(line.as_bytes()).is_ok() {
+                    output::success(&format!(
+                        "  starship — added init to {}",
+                        profile_path.display()
+                    ));
+                }
+            }
+            Err(e) => output::error(&format!(
+                "  starship — failed to update {}: {}",
+                profile_path.display(),
+                e
+            )),
+        }
+    }
 }
 
 /// Replace `${SECRET_NAME}` references in a string with environment variable values.

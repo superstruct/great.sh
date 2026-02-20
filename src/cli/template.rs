@@ -73,26 +73,76 @@ fn run_list() -> Result<()> {
     output::header("Available Templates");
     println!();
 
+    // Show built-in templates
+    output::info("Built-in:");
     for tmpl in builtin_templates() {
         output::info(&format!("  {} — {}", tmpl.name, tmpl.description));
     }
 
+    // Show downloaded templates
+    let downloaded = list_downloaded_templates();
+    if !downloaded.is_empty() {
+        println!();
+        output::info("Downloaded:");
+        for name in &downloaded {
+            output::info(&format!("  {}", name));
+        }
+    }
+
     println!();
     output::info("Apply with: great template apply <name>");
+    output::info("Update with: great template update");
     Ok(())
 }
 
-fn run_apply(name: &str) -> Result<()> {
-    let templates = builtin_templates();
-    let tmpl = match templates.iter().find(|t| t.name == name) {
-        Some(t) => t,
-        None => {
-            output::error(&format!("Unknown template: {}", name));
-            output::info("Available templates:");
-            for t in &templates {
-                output::info(&format!("  {}", t.name));
+/// List template names from the downloaded templates directory.
+fn list_downloaded_templates() -> Vec<String> {
+    let dir = match template_download_dir() {
+        Some(d) if d.exists() => d,
+        _ => return Vec::new(),
+    };
+
+    let mut names = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "toml").unwrap_or(false) {
+                if let Some(stem) = path.file_stem() {
+                    names.push(stem.to_string_lossy().to_string());
+                }
             }
-            return Ok(());
+        }
+    }
+    names.sort();
+    names
+}
+
+/// Return the template download directory (~/.local/share/great/templates/).
+fn template_download_dir() -> Option<std::path::PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("great").join("templates"))
+}
+
+fn run_apply(name: &str) -> Result<()> {
+    // Try built-in templates first
+    let templates = builtin_templates();
+    let template_content = if let Some(tmpl) = templates.iter().find(|t| t.name == name) {
+        tmpl.content.to_string()
+    } else {
+        // Try downloaded templates
+        match load_downloaded_template(name) {
+            Some(content) => content,
+            None => {
+                output::error(&format!("Unknown template: {}", name));
+                output::info("Available templates:");
+                for t in &templates {
+                    output::info(&format!("  {}", t.name));
+                }
+                let downloaded = list_downloaded_templates();
+                for d in &downloaded {
+                    output::info(&format!("  {} (downloaded)", d));
+                }
+                return Ok(());
+            }
         }
     };
 
@@ -103,23 +153,19 @@ fn run_apply(name: &str) -> Result<()> {
         output::info("Existing great.toml found — merging template.");
 
         let existing = config::load(Some("great.toml"))?;
-        let template_config: crate::config::schema::GreatConfig = toml::from_str(tmpl.content)
-            .context(format!("failed to parse template '{}'", name))?;
+        let template_config: crate::config::schema::GreatConfig =
+            toml::from_str(&template_content)
+                .context(format!("failed to parse template '{}'", name))?;
 
-        // Merge: template values fill in gaps, existing values take precedence
         let merged = merge_configs(existing, template_config);
 
-        let toml_string = toml::to_string_pretty(&merged)
-            .context("failed to serialize merged config")?;
-        std::fs::write(config_path, toml_string)
-            .context("failed to write great.toml")?;
+        let toml_string =
+            toml::to_string_pretty(&merged).context("failed to serialize merged config")?;
+        std::fs::write(config_path, toml_string).context("failed to write great.toml")?;
 
         output::success(&format!("Merged template '{}' into great.toml", name));
     } else {
-        // Write template directly
-        std::fs::write(config_path, tmpl.content)
-            .context("failed to write great.toml")?;
-
+        std::fs::write(config_path, &template_content).context("failed to write great.toml")?;
         output::success(&format!("Created great.toml from template '{}'", name));
     }
 
@@ -127,10 +173,107 @@ fn run_apply(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Try to load a template from the downloaded templates directory.
+fn load_downloaded_template(name: &str) -> Option<String> {
+    let dir = template_download_dir()?;
+    let path = dir.join(format!("{}.toml", name));
+    std::fs::read_to_string(path).ok()
+}
+
+/// Fetch latest templates from the GitHub repository.
 fn run_update() -> Result<()> {
-    output::warning("Template registry is not yet available.");
-    output::info("Built-in templates are bundled with the great binary.");
-    output::info("Update great itself to get new templates: great update");
+    output::header("Updating templates");
+    println!();
+
+    let rt = tokio::runtime::Runtime::new().context("failed to create async runtime")?;
+    rt.block_on(fetch_templates_from_github())
+}
+
+/// Download template files from the great-sh/great GitHub repository.
+async fn fetch_templates_from_github() -> Result<()> {
+    let api_url = "https://api.github.com/repos/great-sh/great/contents/templates";
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(api_url)
+        .header("User-Agent", "great-sh")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .context("failed to reach GitHub API")?;
+
+    if !response.status().is_success() {
+        output::warning("Could not fetch templates from GitHub.");
+        output::info("Built-in templates are still available.");
+        output::info("Update great itself for new built-in templates: great update");
+        return Ok(());
+    }
+
+    let entries: Vec<serde_json::Value> = response
+        .json()
+        .await
+        .context("failed to parse GitHub API response")?;
+
+    let toml_files: Vec<_> = entries
+        .iter()
+        .filter(|e| {
+            e["name"]
+                .as_str()
+                .map(|n| n.ends_with(".toml"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if toml_files.is_empty() {
+        output::info("No templates found in repository.");
+        return Ok(());
+    }
+
+    // Ensure download directory exists
+    let dir = template_download_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine template directory"))?;
+    std::fs::create_dir_all(&dir).context("failed to create template directory")?;
+
+    let mut updated = 0;
+    for entry in &toml_files {
+        let name = match entry["name"].as_str() {
+            Some(n) => n,
+            None => continue,
+        };
+        let download_url = match entry["download_url"].as_str() {
+            Some(u) => u,
+            None => continue,
+        };
+
+        let resp = client
+            .get(download_url)
+            .header("User-Agent", "great-sh")
+            .send()
+            .await;
+
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                if let Ok(content) = r.text().await {
+                    let dest = dir.join(name);
+                    if std::fs::write(&dest, &content).is_ok() {
+                        output::success(&format!("  {} — updated", name));
+                        updated += 1;
+                    }
+                }
+            }
+            _ => {
+                output::warning(&format!("  {} — failed to download", name));
+            }
+        }
+    }
+
+    println!();
+    output::info(&format!(
+        "Updated {} templates to {}",
+        updated,
+        dir.display()
+    ));
+
     Ok(())
 }
 

@@ -32,6 +32,7 @@ impl MiseManager {
     }
 
     /// Get the mise version string.
+    #[allow(dead_code)]
     pub fn version() -> Option<String> {
         let output = std::process::Command::new("mise")
             .arg("--version")

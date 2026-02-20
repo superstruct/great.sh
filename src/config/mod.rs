@@ -58,6 +58,7 @@ pub fn discover_config() -> Result<PathBuf> {
 }
 
 /// Return the platform-specific data directory (~/.local/share/great on Linux).
+#[allow(dead_code)]
 pub fn data_dir() -> Result<PathBuf> {
     dirs::data_dir()
         .map(|d| d.join("great"))
@@ -65,6 +66,7 @@ pub fn data_dir() -> Result<PathBuf> {
 }
 
 /// Return the platform-specific config directory (~/.config/great on Linux).
+#[allow(dead_code)]
 pub fn config_dir() -> Result<PathBuf> {
     dirs::config_dir()
         .map(|d| d.join("great"))

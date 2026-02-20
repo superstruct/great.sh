@@ -1,0 +1,37 @@
+# great.sh cross-platform test rigs
+#
+# Usage:
+#   docker compose up --build ubuntu    # Test on Ubuntu 22.04
+#   docker compose up --build fedora    # Test on Fedora 39
+#   docker compose run ubuntu bash      # Interactive shell
+#
+# Each container builds the great CLI from source and runs the test suite.
+
+services:
+  ubuntu:
+    build:
+      context: .
+      dockerfile: docker/ubuntu.Dockerfile
+    volumes:
+      - .:/workspace:ro
+      - cargo-cache-ubuntu:/root/.cargo/registry
+    working_dir: /build
+    command: ["bash", "/workspace/docker/test.sh"]
+    environment:
+      - PLATFORM=ubuntu
+
+  fedora:
+    build:
+      context: .
+      dockerfile: docker/fedora.Dockerfile
+    volumes:
+      - .:/workspace:ro
+      - cargo-cache-fedora:/root/.cargo/registry
+    working_dir: /build
+    command: ["bash", "/workspace/docker/test.sh"]
+    environment:
+      - PLATFORM=fedora
+
+volumes:
+  cargo-cache-ubuntu:
+  cargo-cache-fedora:

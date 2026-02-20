@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 /// Status of sync between local and remote.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum SyncStatus {
     InSync,
     LocalNewer,
@@ -13,6 +14,7 @@ pub enum SyncStatus {
 
 /// Encrypted blob for sync transport.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SyncBlob {
     pub data: Vec<u8>,
     pub timestamp: u64,
@@ -34,6 +36,7 @@ pub fn export_config(config_path: &Path) -> Result<Vec<u8>> {
 }
 
 /// Import config from bytes.
+#[allow(dead_code)]
 pub fn import_config(data: &[u8], config_path: &Path) -> Result<()> {
     std::fs::write(config_path, data)
         .context(format!("failed to write {}", config_path.display()))?;

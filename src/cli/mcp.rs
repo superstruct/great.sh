@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Args as ClapArgs, Subcommand};
 
 use crate::cli::output;
@@ -106,7 +106,7 @@ fn run_list() -> Result<()> {
     Ok(())
 }
 
-/// Print instructions for adding an MCP server to `great.toml`.
+/// Add an MCP server entry to `great.toml` using format-preserving editing.
 fn run_add(name: &str) -> Result<()> {
     output::header(&format!("Adding MCP server: {}", name));
 
@@ -128,18 +128,39 @@ fn run_add(name: &str) -> Result<()> {
         }
     }
 
-    // For now, print a stub entry the user can add to great.toml.
-    // In the future, this would query the MCP Registry.
-    output::info(&format!("To add '{}', add this to your great.toml:", name));
-    println!();
-    println!("[mcp.{}]", name);
-    println!("command = \"npx\"");
-    println!(
-        "args = [\"-y\", \"@modelcontextprotocol/server-{}\"]",
-        name
-    );
-    println!();
-    output::info("Then run `great apply` to configure it.");
+    // Use toml_edit for format-preserving modification
+    let content = std::fs::read_to_string(&config_path)
+        .context("failed to read great.toml")?;
+    let mut doc: toml_edit::DocumentMut = content
+        .parse()
+        .context("failed to parse great.toml for editing")?;
+
+    // Ensure [mcp] table exists
+    if doc.get("mcp").is_none() {
+        doc["mcp"] = toml_edit::Item::Table(toml_edit::Table::new());
+    }
+
+    // Build the server entry as an inline table
+    let mut server_table = toml_edit::Table::new();
+    server_table.insert("command", toml_edit::value("npx"));
+    let mut args_array = toml_edit::Array::new();
+    args_array.push("-y");
+    args_array.push(format!("@modelcontextprotocol/server-{}", name));
+    server_table.insert("args", toml_edit::value(args_array));
+
+    // Insert into the mcp table
+    if let Some(mcp_item) = doc.get_mut("mcp") {
+        if let Some(mcp_table) = mcp_item.as_table_mut() {
+            mcp_table.insert(name, toml_edit::Item::Table(server_table));
+        }
+    }
+
+    // Write back
+    std::fs::write(&config_path, doc.to_string())
+        .context("failed to write great.toml")?;
+
+    output::success(&format!("Added MCP server '{}' to great.toml", name));
+    output::info("Run `great apply` to configure it in .mcp.json.");
 
     Ok(())
 }

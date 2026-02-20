@@ -401,12 +401,14 @@ dependencies = [
  "predicates",
  "regex",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

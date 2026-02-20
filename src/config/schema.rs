@@ -55,9 +55,9 @@ pub struct ProjectConfig {
 /// starship = "latest"
 /// # Cloud CLIs
 /// aws = "latest"
-/// cdk = "latest"          # TODO: install via npm (npm i -g aws-cdk), not brew/apt
-/// az = "latest"           # TODO: special install path (brew install azure-cli / curl script)
-/// gcloud = "latest"       # TODO: special install path (snap / brew / curl script)
+/// cdk = "latest"          # installed via npm (npm i -g aws-cdk)
+/// az = "latest"           # installed as brew install azure-cli
+/// gcloud = "latest"       # installed as brew install google-cloud-sdk
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolsConfig {

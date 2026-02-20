@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Args as ClapArgs, Subcommand};
 
 use crate::cli::output;
@@ -16,13 +16,17 @@ pub enum SyncCommand {
     /// Push local configuration to sync storage
     Push,
     /// Pull configuration from sync storage
-    Pull,
+    Pull {
+        /// Apply the pulled config to great.toml (backs up existing)
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 pub fn run(args: Args) -> Result<()> {
     match args.command {
         SyncCommand::Push => run_push(),
-        SyncCommand::Pull => run_pull(),
+        SyncCommand::Pull { apply } => run_pull(apply),
     }
 }
 
@@ -45,8 +49,7 @@ fn run_push() -> Result<()> {
     let data = sync::export_config(&config_path)?;
     output::info(&format!("Config size: {} bytes", data.len()));
 
-    // Note: In production, this would encrypt the data with AES-256-GCM
-    // and upload to the great.sh cloud. For now, save locally.
+    // Save locally (cloud sync is a future feature)
     output::warning("Cloud sync is not yet available. Saving locally.");
 
     let save_path = sync::save_local(&data)?;
@@ -56,20 +59,61 @@ fn run_push() -> Result<()> {
     Ok(())
 }
 
-fn run_pull() -> Result<()> {
+fn run_pull(apply: bool) -> Result<()> {
     output::header("great sync pull");
     println!();
 
-    // Note: In production, this would download from great.sh cloud
+    // Load from local storage (cloud sync is a future feature)
     output::warning("Cloud sync is not yet available. Loading from local storage.");
 
     match sync::load_local()? {
         Some(data) => {
             output::info(&format!("Found sync blob: {} bytes", data.len()));
 
-            // For now, just show what we'd do
-            output::info("Would restore great.toml from sync blob.");
-            output::info("Use `great sync pull --apply` to overwrite current config (not yet implemented).");
+            // Verify the blob is valid TOML before applying
+            let content = String::from_utf8(data.clone())
+                .context("sync blob is not valid UTF-8")?;
+
+            if let Err(e) = toml::from_str::<crate::config::schema::GreatConfig>(&content) {
+                output::error(&format!("Sync blob contains invalid config: {}", e));
+                output::info("The stored config may be corrupted. Run `great sync push` to re-sync.");
+                return Ok(());
+            }
+
+            if apply {
+                // Find or default the config path
+                let config_path = config::discover_config()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("great.toml"));
+
+                // Backup existing config if it exists
+                if config_path.exists() {
+                    let backup = config_path.with_extension("toml.bak");
+                    std::fs::copy(&config_path, &backup)
+                        .context("failed to backup existing great.toml")?;
+                    output::info(&format!("Backed up existing config to {}", backup.display()));
+                }
+
+                // Write the pulled data
+                std::fs::write(&config_path, &content)
+                    .context("failed to write great.toml")?;
+
+                output::success(&format!("Applied sync data to {}", config_path.display()));
+                output::info("Run `great apply` to provision the restored environment.");
+            } else {
+                // Preview mode: show the config content
+                output::info("Sync blob content:");
+                println!();
+                // Show first 40 lines as preview
+                for (i, line) in content.lines().enumerate() {
+                    if i >= 40 {
+                        output::info(&format!("  ... ({} more lines)", content.lines().count() - 40));
+                        break;
+                    }
+                    println!("  {}", line);
+                }
+                println!();
+                output::info("Use `great sync pull --apply` to overwrite current config.");
+            }
         }
         None => {
             output::warning("No sync data found. Run `great sync push` first.");

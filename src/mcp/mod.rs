@@ -42,6 +42,7 @@ impl McpJsonConfig {
     }
 
     /// Save this config as pretty-printed JSON to the given path.
+    #[allow(dead_code)]
     pub fn save(&self, path: &Path) -> Result<()> {
         let json =
             serde_json::to_string_pretty(self).context("failed to serialize MCP config")?;
@@ -50,6 +51,7 @@ impl McpJsonConfig {
     }
 
     /// Add a server from a [`McpConfig`] entry parsed from `great.toml`.
+    #[allow(dead_code)]
     pub fn add_server(&mut self, name: &str, config: &McpConfig) {
         let entry = McpServerEntry {
             command: config.command.clone(),
@@ -65,6 +67,7 @@ impl McpJsonConfig {
     }
 
     /// List all configured server names.
+    #[allow(dead_code)]
     pub fn server_names(&self) -> Vec<&String> {
         self.mcp_servers.keys().collect()
     }
@@ -93,6 +96,7 @@ pub fn project_mcp_path() -> PathBuf {
 }
 
 /// Return the user-level Claude config path (`~/.claude.json`).
+#[allow(dead_code)]
 pub fn user_mcp_path() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude.json"))
 }
