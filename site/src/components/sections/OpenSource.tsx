@@ -28,7 +28,7 @@ export function OpenSource() {
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
             <a
-              href="https://github.com/great-sh/great"
+              href="https://github.com/superstruct/great.sh"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-text-primary text-bg-primary font-medium px-8 py-3 rounded-lg hover:bg-text-secondary transition-colors"
@@ -37,7 +37,7 @@ export function OpenSource() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/great-sh/great/discussions"
+              href="https://github.com/superstruct/great.sh/discussions"
               target="_blank"
               rel="noopener noreferrer"
               className="text-text-secondary hover:text-accent transition-colors"
@@ -45,6 +45,27 @@ export function OpenSource() {
               Join the discussion &rarr;
             </a>
           </motion.div>
+
+          <p className="text-text-tertiary text-sm mt-6">
+            great.sh is in beta. Found a bug or have a suggestion?{' '}
+            <a
+              href="https://github.com/superstruct/great.sh/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:text-accent-hover transition-colors"
+            >
+              Open an issue
+            </a>
+            {' '}or{' '}
+            <a
+              href="https://github.com/superstruct/great.sh/discussions"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:text-accent-hover transition-colors"
+            >
+              start a discussion
+            </a>.
+          </p>
         </div>
       </Container>
     </AnimatedSection>

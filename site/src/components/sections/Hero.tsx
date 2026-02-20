@@ -18,6 +18,15 @@ export function Hero() {
     <section id="hero" className="min-h-screen flex items-center pt-16">
       <Container>
         <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
+          <motion.span
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="text-xs font-mono text-accent border border-accent/30 bg-accent-muted px-3 py-1 rounded-full mb-4 inline-block"
+          >
+            beta — open to testing &amp; feedback
+          </motion.span>
+
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}

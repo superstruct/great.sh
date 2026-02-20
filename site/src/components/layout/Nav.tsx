@@ -34,6 +34,9 @@ export function Nav() {
         <a href="#" className="flex items-center gap-2 font-display text-xl text-text-primary">
           <span className="text-accent font-mono font-bold">&gt;</span>
           great.sh
+          <span className="text-[10px] font-mono text-accent border border-accent/30 bg-accent-muted px-1.5 py-0.5 rounded-full">
+            beta
+          </span>
         </a>
 
         <div className="hidden md:flex items-center gap-8">
@@ -47,7 +50,7 @@ export function Nav() {
             </a>
           ))}
           <a
-            href="https://github.com/great-sh/great"
+            href="https://github.com/superstruct/great.sh"
             target="_blank"
             rel="noopener noreferrer"
             className="text-text-secondary hover:text-text-primary transition-colors"
@@ -79,7 +82,7 @@ export function Nav() {
               </a>
             ))}
             <a
-              href="https://github.com/great-sh/great"
+              href="https://github.com/superstruct/great.sh"
               target="_blank"
               rel="noopener noreferrer"
               className="text-text-secondary hover:text-text-primary transition-colors py-2 flex items-center gap-2"
