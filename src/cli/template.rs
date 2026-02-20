@@ -322,3 +322,289 @@ fn merge_configs(
         platform: existing.platform.or(template.platform),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::schema::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_merge_both_empty() {
+        let result = merge_configs(GreatConfig::default(), GreatConfig::default());
+        assert!(result.project.is_none());
+        assert!(result.tools.is_none());
+        assert!(result.agents.is_none());
+        assert!(result.mcp.is_none());
+        assert!(result.secrets.is_none());
+        assert!(result.platform.is_none());
+    }
+
+    #[test]
+    fn test_merge_existing_takes_precedence_project() {
+        let existing = GreatConfig {
+            project: Some(ProjectConfig {
+                name: Some("existing".into()),
+                description: Some("existing desc".into()),
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            project: Some(ProjectConfig {
+                name: Some("template".into()),
+                description: Some("template desc".into()),
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let proj = result.project.unwrap();
+        assert_eq!(proj.name.as_deref(), Some("existing"));
+        assert_eq!(proj.description.as_deref(), Some("existing desc"));
+    }
+
+    #[test]
+    fn test_merge_template_fills_gap_project() {
+        let existing = GreatConfig::default();
+        let template = GreatConfig {
+            project: Some(ProjectConfig {
+                name: Some("from-template".into()),
+                description: None,
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let proj = result.project.unwrap();
+        assert_eq!(proj.name.as_deref(), Some("from-template"));
+    }
+
+    #[test]
+    fn test_merge_tools_runtimes_merged() {
+        let existing = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::from([("node".into(), "20".into())]),
+                cli: None,
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::from([
+                    ("node".into(), "22".into()),
+                    ("python".into(), "3.12".into()),
+                ]),
+                cli: None,
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.runtimes.get("node").unwrap(), "20");
+        assert_eq!(tools.runtimes.get("python").unwrap(), "3.12");
+    }
+
+    #[test]
+    fn test_merge_tools_cli_merged() {
+        let existing = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::new(),
+                cli: Some(HashMap::from([("ripgrep".into(), "14".into())])),
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::new(),
+                cli: Some(HashMap::from([
+                    ("ripgrep".into(), "latest".into()),
+                    ("fd".into(), "latest".into()),
+                ])),
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let cli = result.tools.unwrap().cli.unwrap();
+        assert_eq!(cli.get("ripgrep").unwrap(), "14");
+        assert_eq!(cli.get("fd").unwrap(), "latest");
+    }
+
+    #[test]
+    fn test_merge_tools_only_existing() {
+        let existing = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::from([("node".into(), "20".into())]),
+                cli: None,
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig::default();
+        let result = merge_configs(existing, template);
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.runtimes.get("node").unwrap(), "20");
+    }
+
+    #[test]
+    fn test_merge_tools_only_template() {
+        let existing = GreatConfig::default();
+        let template = GreatConfig {
+            tools: Some(ToolsConfig {
+                runtimes: HashMap::from([("python".into(), "3.12".into())]),
+                cli: None,
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.runtimes.get("python").unwrap(), "3.12");
+    }
+
+    #[test]
+    fn test_merge_agents_existing_wins() {
+        let existing = GreatConfig {
+            agents: Some(HashMap::from([(
+                "claude".into(),
+                AgentConfig {
+                    provider: Some("anthropic".into()),
+                    model: Some("opus".into()),
+                },
+            )])),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            agents: Some(HashMap::from([(
+                "claude".into(),
+                AgentConfig {
+                    provider: Some("anthropic".into()),
+                    model: Some("sonnet".into()),
+                },
+            )])),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let agents = result.agents.unwrap();
+        assert_eq!(agents["claude"].model.as_deref(), Some("opus"));
+    }
+
+    #[test]
+    fn test_merge_agents_template_fills_new_keys() {
+        let existing = GreatConfig {
+            agents: Some(HashMap::from([(
+                "claude".into(),
+                AgentConfig {
+                    provider: Some("anthropic".into()),
+                    model: None,
+                },
+            )])),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            agents: Some(HashMap::from([(
+                "gpt".into(),
+                AgentConfig {
+                    provider: Some("openai".into()),
+                    model: Some("gpt-4".into()),
+                },
+            )])),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let agents = result.agents.unwrap();
+        assert!(agents.contains_key("claude"));
+        assert!(agents.contains_key("gpt"));
+        assert_eq!(agents["gpt"].model.as_deref(), Some("gpt-4"));
+    }
+
+    #[test]
+    fn test_merge_mcp_existing_wins() {
+        let existing = GreatConfig {
+            mcp: Some(HashMap::from([(
+                "fs".into(),
+                McpConfig {
+                    command: "existing-cmd".into(),
+                    args: None,
+                    env: None,
+                    transport: None,
+                    url: None,
+                },
+            )])),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            mcp: Some(HashMap::from([
+                (
+                    "fs".into(),
+                    McpConfig {
+                        command: "template-cmd".into(),
+                        args: None,
+                        env: None,
+                        transport: None,
+                        url: None,
+                    },
+                ),
+                (
+                    "db".into(),
+                    McpConfig {
+                        command: "db-cmd".into(),
+                        args: None,
+                        env: None,
+                        transport: None,
+                        url: None,
+                    },
+                ),
+            ])),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let mcp = result.mcp.unwrap();
+        assert_eq!(mcp["fs"].command, "existing-cmd");
+        assert_eq!(mcp["db"].command, "db-cmd");
+    }
+
+    #[test]
+    fn test_merge_secrets_existing_wins() {
+        let existing = GreatConfig {
+            secrets: Some(SecretsConfig {
+                provider: Some("1password".into()),
+                required: Some(vec!["KEY_A".into()]),
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            secrets: Some(SecretsConfig {
+                provider: Some("env".into()),
+                required: Some(vec!["KEY_B".into()]),
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let secrets = result.secrets.unwrap();
+        assert_eq!(secrets.provider.as_deref(), Some("1password"));
+    }
+
+    #[test]
+    fn test_merge_platform_existing_wins() {
+        let existing = GreatConfig {
+            platform: Some(PlatformConfig {
+                macos: Some(PlatformOverride {
+                    extra_tools: Some(vec!["coreutils".into()]),
+                }),
+                wsl2: None,
+                linux: None,
+            }),
+            ..Default::default()
+        };
+        let template = GreatConfig {
+            platform: Some(PlatformConfig {
+                macos: Some(PlatformOverride {
+                    extra_tools: Some(vec!["gnu-sed".into()]),
+                }),
+                wsl2: None,
+                linux: None,
+            }),
+            ..Default::default()
+        };
+        let result = merge_configs(existing, template);
+        let platform = result.platform.unwrap();
+        let macos_tools = platform.macos.unwrap().extra_tools.unwrap();
+        assert_eq!(macos_tools, vec!["coreutils"]);
+    }
+}

@@ -81,3 +81,81 @@ pub fn load_local() -> Result<Option<Vec<u8>>> {
         .context("failed to read latest sync blob")?;
     Ok(Some(data))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_sync_dir_returns_path() {
+        let result = sync_dir();
+        assert!(result.is_ok(), "sync_dir() should return Ok");
+        let path = result.unwrap();
+        assert!(
+            path.ends_with("great/sync"),
+            "sync_dir() path should end with 'great/sync', got: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn test_export_config_reads_file() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        let file_path = tmp.path().join("test-config.toml");
+        let content = b"[tool]\nname = \"great\"\n";
+        std::fs::write(&file_path, content).expect("failed to write test file");
+
+        let result = export_config(&file_path);
+        assert!(result.is_ok(), "export_config should succeed for existing file");
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn test_export_config_missing_file_errors() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        let missing = tmp.path().join("nonexistent.toml");
+
+        let result = export_config(&missing);
+        assert!(
+            result.is_err(),
+            "export_config should return Err for a nonexistent file"
+        );
+    }
+
+    #[test]
+    fn test_import_export_roundtrip() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        let original = tmp.path().join("original.toml");
+        let restored = tmp.path().join("restored.toml");
+
+        let content = b"[settings]\ntheme = \"dark\"\n";
+        std::fs::write(&original, content).expect("failed to write original file");
+
+        // Export from the original file
+        let exported = export_config(&original).expect("export_config failed");
+
+        // Import into a new location
+        import_config(&exported, &restored).expect("import_config failed");
+
+        // Verify the restored file matches
+        let restored_content = std::fs::read(&restored).expect("failed to read restored file");
+        assert_eq!(
+            restored_content, content,
+            "imported config should match the original content"
+        );
+    }
+
+    #[test]
+    fn test_load_local_no_data_returns_ok() {
+        // load_local reads from the real sync_dir(). If latest.bin does not
+        // exist there, it should return Ok(None). If it does exist (from a
+        // previous run), it should return Ok(Some(_)). Either way, it must
+        // not panic.
+        let result = load_local();
+        assert!(
+            result.is_ok(),
+            "load_local() should return Ok even when no data has been saved"
+        );
+    }
+}

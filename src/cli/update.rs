@@ -210,3 +210,38 @@ fn release_asset_name() -> String {
     };
     format!("great-{}-{}", os, arch_str)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_release_asset_name_format() {
+        let name = release_asset_name();
+        assert!(
+            name.starts_with("great-"),
+            "should start with 'great-': {}",
+            name
+        );
+        let parts: Vec<&str> = name.split('-').collect();
+        assert_eq!(parts.len(), 3, "should have 3 parts: {}", name);
+        assert!(
+            ["linux", "macos"].contains(&parts[1]),
+            "OS should be linux or macos: {}",
+            name
+        );
+        assert!(
+            ["x86_64", "aarch64"].contains(&parts[2]),
+            "arch should be x86_64 or aarch64: {}",
+            name
+        );
+    }
+
+    #[test]
+    fn test_release_asset_name_stable() {
+        // Calling twice should return the same result
+        let a = release_asset_name();
+        let b = release_asset_name();
+        assert_eq!(a, b);
+    }
+}
