@@ -84,11 +84,59 @@ pub fn run(args: Args) -> Result<()> {
         runtimes.insert("rust".to_string(), "stable".to_string());
     }
 
+
+    if prompt_yes_no("Install Deno?", false)? {
+        runtimes.insert("deno".to_string(), "latest".to_string());
+    }
+
     // Common CLI tools
-    if prompt_yes_no("Install common CLI tools (ripgrep, fd, jq)?", true)? {
+    if prompt_yes_no("Install common CLI tools (ripgrep, fd, bat, jq)?", true)? {
         cli_tools.insert("rg".to_string(), "latest".to_string());
         cli_tools.insert("fd".to_string(), "latest".to_string());
+        cli_tools.insert("bat".to_string(), "latest".to_string());
         cli_tools.insert("jq".to_string(), "latest".to_string());
+    }
+
+    if prompt_yes_no("Install GitHub CLI (gh)?", true)? {
+        cli_tools.insert("gh".to_string(), "latest".to_string());
+    }
+
+    // Package managers
+    if runtimes.contains_key("node") {
+        if prompt_yes_no("Install pnpm (fast Node.js package manager)?", true)? {
+            cli_tools.insert("pnpm".to_string(), "latest".to_string());
+        }
+    }
+    if runtimes.contains_key("python") {
+        if prompt_yes_no("Install uv (fast Python package manager)?", true)? {
+            cli_tools.insert("uv".to_string(), "latest".to_string());
+        }
+    }
+
+    // Shell prompt
+    if prompt_yes_no("Install Starship prompt?", false)? {
+        cli_tools.insert("starship".to_string(), "latest".to_string());
+        // TODO: After install, run starship configuration:
+        //   - Generate ~/.config/starship.toml with great.sh preset
+        //   - Add `eval "$(starship init bash)"` (or zsh/fish) to shell profile
+    }
+
+    // Cloud CLIs
+    eprintln!();
+    output::header("Cloud CLIs");
+    eprintln!();
+
+    if prompt_yes_no("Install AWS CLI + CDK?", false)? {
+        cli_tools.insert("aws".to_string(), "latest".to_string());
+        // TODO: CDK is installed via npm globally: npm install -g aws-cdk
+        // Need to handle this as a special case in apply since it's an npm package
+        cli_tools.insert("cdk".to_string(), "latest".to_string());
+    }
+    if prompt_yes_no("Install Azure CLI?", false)? {
+        cli_tools.insert("az".to_string(), "latest".to_string());
+    }
+    if prompt_yes_no("Install Google Cloud CLI?", false)? {
+        cli_tools.insert("gcloud".to_string(), "latest".to_string());
     }
 
     if !runtimes.is_empty() || !cli_tools.is_empty() {
@@ -165,26 +213,8 @@ pub fn run(args: Args) -> Result<()> {
         );
     }
 
-    if prompt_yes_no("Add GitHub MCP server?", false)? {
-        let mut env = HashMap::new();
-        env.insert(
-            "GITHUB_PERSONAL_ACCESS_TOKEN".to_string(),
-            "${GITHUB_TOKEN}".to_string(),
-        );
-        mcps.insert(
-            "github".to_string(),
-            McpConfig {
-                command: "npx".to_string(),
-                args: Some(vec![
-                    "-y".to_string(),
-                    "@modelcontextprotocol/server-github".to_string(),
-                ]),
-                env: Some(env),
-                transport: None,
-                url: None,
-            },
-        );
-    }
+    // NOTE: GitHub MCP server removed in favour of the `gh` CLI which is
+    // faster, requires no token plumbing, and already installed above.
 
     if !mcps.is_empty() {
         config.mcp = Some(mcps);
@@ -257,9 +287,10 @@ fn init_from_template(template: &str, config_path: &Path) -> Result<()> {
         "ai-fullstack-ts" => include_str!("../../templates/ai-fullstack-ts.toml"),
         "ai-fullstack-py" => include_str!("../../templates/ai-fullstack-py.toml"),
         "ai-minimal" => include_str!("../../templates/ai-minimal.toml"),
+        "saas-multi-tenant" => include_str!("../../templates/saas-multi-tenant.toml"),
         _ => {
             output::error(&format!(
-                "Unknown template: {}. Available: ai-fullstack-ts, ai-fullstack-py, ai-minimal",
+                "Unknown template: {}. Available: ai-fullstack-ts, ai-fullstack-py, ai-minimal, saas-multi-tenant",
                 template
             ));
             return Ok(());
@@ -390,6 +421,7 @@ mod tests {
             ("ai-fullstack-ts", include_str!("../../templates/ai-fullstack-ts.toml")),
             ("ai-fullstack-py", include_str!("../../templates/ai-fullstack-py.toml")),
             ("ai-minimal", include_str!("../../templates/ai-minimal.toml")),
+            ("saas-multi-tenant", include_str!("../../templates/saas-multi-tenant.toml")),
         ];
         for (name, content) in &templates {
             let config: GreatConfig = toml::from_str(content)

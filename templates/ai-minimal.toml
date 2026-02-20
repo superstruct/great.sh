@@ -1,6 +1,9 @@
 [project]
 name = "my-project"
 
+[tools.cli]
+gh = "latest"
+
 [agents.claude]
 provider = "anthropic"
 model = "claude-sonnet-4-20250514"

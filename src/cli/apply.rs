@@ -57,6 +57,64 @@ pub fn run(args: Args) -> Result<()> {
         println!();
     }
 
+    // 2b. Ensure Homebrew is available (primary package manager for macOS, Ubuntu, and WSL Ubuntu).
+    // Homebrew (Linuxbrew) is preferred over apt for CLI tools because it provides
+    // up-to-date versions without needing sudo. Apt is kept only as a fallback for
+    // system-level packages (e.g. docker, chrome from official repos).
+    let needs_homebrew = match &info.platform {
+        platform::Platform::MacOS { .. } => true,
+        platform::Platform::Linux { distro, .. } | platform::Platform::Wsl { distro, .. } => {
+            matches!(
+                distro,
+                platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
+            )
+        }
+        _ => false,
+    };
+
+    if needs_homebrew && !info.capabilities.has_homebrew {
+        let platform_label = match &info.platform {
+            platform::Platform::MacOS { .. } => "macOS",
+            platform::Platform::Wsl { .. } => "WSL Ubuntu",
+            _ => "Ubuntu/Debian",
+        };
+        if args.dry_run {
+            output::info(&format!(
+                "Homebrew not found — would install (primary package manager for {})",
+                platform_label
+            ));
+        } else {
+            output::warning(&format!(
+                "Homebrew not found — installing (primary package manager for {})...",
+                platform_label
+            ));
+            let status = std::process::Command::new("bash")
+                .args([
+                    "-c",
+                    "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                ])
+                .status();
+            match status {
+                Ok(s) if s.success() => {
+                    output::success("Homebrew installed successfully");
+                    // On Linux, brew is installed to /home/linuxbrew/.linuxbrew or ~/.linuxbrew.
+                    // The user's shell profile needs `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"`
+                    // but that only takes effect in new shells. For this session, try to add it to PATH.
+                    if !matches!(info.platform, platform::Platform::MacOS { .. }) {
+                        output::info("Note: You may need to run `eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"` or restart your shell.");
+                    }
+                }
+                _ => {
+                    output::error("Failed to install Homebrew — some tools may not install");
+                    output::info(
+                        "Install manually: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                    );
+                }
+            }
+        }
+        println!();
+    }
+
     // 3. Install runtimes via mise
     if let Some(tools) = &cfg.tools {
         // Check if there are any runtimes to install (exclude "cli" key)
@@ -136,6 +194,20 @@ pub fn run(args: Args) -> Result<()> {
         }
 
         // 4. Install CLI tools via package managers
+        //
+        // TODO: Some CLI tools need special install paths that differ from
+        // a simple `brew install <name>` / `apt install <name>`:
+        //   - cdk:    `npm install -g aws-cdk`
+        //   - az:     `brew install azure-cli` (name differs) or curl installer on Linux
+        //   - gcloud: `brew install google-cloud-sdk` or snap/curl on Linux
+        //   - aws:    `brew install awscli` (name differs) or curl installer on Linux
+        //   - pnpm:   `npm install -g pnpm` or `brew install pnpm`
+        //   - uv:     `brew install uv` or `pip install uv` or curl installer
+        //   - starship: `brew install starship` (then needs shell init config)
+        //   - bitwarden-cli: `npm install -g @bitwarden/cli`
+        //
+        // Consider adding a tool-name-to-install-command mapping table, or
+        // an `install_hint` field in the schema for tools that need it.
         if let Some(cli_tools) = &tools.cli {
             if !cli_tools.is_empty() {
                 output::header("CLI Tools");
@@ -266,6 +338,41 @@ pub fn run(args: Args) -> Result<()> {
             println!();
         }
     }
+
+    // 5b. Install bitwarden-cli if secrets provider is bitwarden and bw is missing
+    if let Some(secrets) = &cfg.secrets {
+        if secrets.provider.as_deref() == Some("bitwarden") && !command_exists("bw") {
+            if args.dry_run {
+                output::info("bitwarden-cli (bw) — would install (secrets provider is bitwarden)");
+            } else {
+                output::header("Bitwarden CLI");
+                output::info("Secrets provider is bitwarden — installing bw CLI...");
+                // TODO: Try npm install -g @bitwarden/cli first, then brew/apt fallback
+                let managers = package_manager::available_managers();
+                let mut installed = false;
+                for mgr in &managers {
+                    if mgr.install("@bitwarden/cli", None).is_ok() {
+                        output::success(&format!("  bw — installed via {}", mgr.name()));
+                        installed = true;
+                        break;
+                    }
+                }
+                if !installed {
+                    output::error("  bw — could not install. Install manually: npm install -g @bitwarden/cli");
+                }
+                println!();
+            }
+        }
+    }
+
+    // 5c. Configure Starship prompt if starship is in CLI tools
+    // TODO: After installing starship, we should also:
+    //   - Generate ~/.config/starship.toml with a great.sh preset
+    //   - Detect the user's shell and add the init line to their profile:
+    //     bash:  eval "$(starship init bash)"  -> ~/.bashrc
+    //     zsh:   eval "$(starship init zsh)"   -> ~/.zshrc
+    //     fish:  starship init fish | source   -> ~/.config/fish/config.fish
+    //   - This requires a new `configure_starship()` helper in platform/
 
     // 6. Check secrets
     if let Some(secrets) = &cfg.secrets {

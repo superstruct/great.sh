@@ -34,14 +34,30 @@ pub struct ProjectConfig {
 
 /// Tools section — top-level keys are runtime versions, `[tools.cli]` holds CLI tools.
 ///
+/// Templates can declare their own `[tools.cli]` entries (e.g. `hasura-cli`,
+/// `aws`, `cdk`) which get merged into the user's config when applied via
+/// `great template apply`. This lets domain-specific templates pull in the
+/// CLI tools they need.
+///
 /// Example:
 /// ```toml
 /// [tools]
 /// node = "22"
 /// python = "3.12"
+/// deno = "latest"
 ///
 /// [tools.cli]
 /// ripgrep = "latest"
+/// gh = "latest"
+/// bat = "latest"
+/// pnpm = "latest"
+/// uv = "latest"
+/// starship = "latest"
+/// # Cloud CLIs
+/// aws = "latest"
+/// cdk = "latest"          # TODO: install via npm (npm i -g aws-cdk), not brew/apt
+/// az = "latest"           # TODO: special install path (brew install azure-cli / curl script)
+/// gcloud = "latest"       # TODO: special install path (snap / brew / curl script)
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolsConfig {

@@ -4,8 +4,15 @@ description = "Full-stack TypeScript AI project"
 
 [tools]
 node = "22"
+deno = "latest"
+
 [tools.cli]
 typescript = "latest"
+pnpm = "latest"
+gh = "latest"
+bat = "latest"
+uv = "latest"
+starship = "latest"
 
 [agents.claude]
 provider = "anthropic"

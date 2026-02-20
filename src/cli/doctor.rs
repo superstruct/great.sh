@@ -120,12 +120,13 @@ fn check_platform(result: &mut DiagnosticResult) {
         pass(result, "Running as regular user");
     }
 
-    // Package manager availability
+    // Package manager availability — Homebrew is the primary package manager
+    // on macOS, Ubuntu, and WSL Ubuntu. Apt is a fallback for system packages only.
     let caps = &info.capabilities;
     match &info.platform {
         Platform::MacOS { .. } => {
             if caps.has_homebrew {
-                pass(result, "Homebrew: installed");
+                pass(result, "Homebrew: installed (primary package manager)");
             } else {
                 fail(
                     result,
@@ -133,16 +134,30 @@ fn check_platform(result: &mut DiagnosticResult) {
                 );
             }
         }
-        Platform::Linux { .. } | Platform::Wsl { .. } => {
-            if caps.has_apt {
-                pass(result, "apt: available");
+        Platform::Linux { distro, .. } | Platform::Wsl { distro, .. } => {
+            let is_ubuntu_debian = matches!(
+                distro,
+                platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
+            );
+            if caps.has_homebrew {
+                pass(result, "Homebrew (Linuxbrew): installed (primary package manager)");
+            } else if is_ubuntu_debian {
+                fail(
+                    result,
+                    "Homebrew (Linuxbrew): not installed — required as primary package manager. Run: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                );
             } else if caps.has_dnf {
                 pass(result, "dnf: available");
             } else {
                 warn(
                     result,
-                    "No supported package manager found (apt or dnf)",
+                    "No supported package manager found (homebrew recommended)",
                 );
+            }
+
+            // Apt reported as available fallback, not as primary
+            if caps.has_apt {
+                pass(result, "apt: available (fallback for system packages)");
             }
         }
         _ => {}
@@ -165,11 +180,21 @@ fn check_essential_tools(result: &mut DiagnosticResult) {
             "apt install curl / brew install curl",
         ),
         (
+            "gh",
+            "GitHub CLI",
+            "https://cli.github.com or brew install gh",
+        ),
+        (
             "node",
             "Node.js runtime",
             "https://nodejs.org or use mise",
         ),
         ("npm", "npm package manager", "Comes with Node.js"),
+        (
+            "pnpm",
+            "pnpm package manager",
+            "npm install -g pnpm or brew install pnpm",
+        ),
         ("cargo", "Rust toolchain", "https://rustup.rs"),
     ];
 
@@ -194,6 +219,21 @@ fn check_essential_tools(result: &mut DiagnosticResult) {
             result,
             "mise: not installed — recommended for managing tool versions. Install: https://mise.jdx.dev",
         );
+    }
+
+    // Recommended extras
+    let recommended = [
+        ("bat", "bat (cat with syntax highlighting)", "brew install bat"),
+        ("uv", "uv (fast Python package manager)", "brew install uv / pip install uv"),
+        ("deno", "Deno runtime", "brew install deno / mise install deno"),
+        ("starship", "Starship prompt", "brew install starship"),
+    ];
+    for (cmd, name, install_hint) in &recommended {
+        if command_exists(cmd) {
+            pass(result, &format!("{}: installed", name));
+        } else {
+            warn(result, &format!("{}: not found (optional) — {}", name, install_hint));
+        }
     }
 
     println!();

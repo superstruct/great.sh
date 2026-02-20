@@ -6,6 +6,12 @@ description = "Full-stack Python AI project"
 python = "3.12"
 node = "22"
 
+[tools.cli]
+uv = "latest"
+gh = "latest"
+bat = "latest"
+starship = "latest"
+
 [agents.claude]
 provider = "anthropic"
 model = "claude-sonnet-4-20250514"

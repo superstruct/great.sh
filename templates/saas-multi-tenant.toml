@@ -1,0 +1,34 @@
+[project]
+name = "my-saas"
+description = "Multi-tenant SaaS with Hasura, AWS, and AI agents"
+
+[tools]
+node = "22"
+python = "3.12"
+
+# Templates can declare their own CLI tools — `great apply` installs them
+# alongside any tools the user has added manually to their great.toml.
+[tools.cli]
+pnpm = "latest"
+uv = "latest"
+gh = "latest"
+bat = "latest"
+hasura-cli = "latest"
+aws = "latest"
+cdk = "latest"
+starship = "latest"
+
+[agents.claude]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+
+[mcp.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+
+[secrets]
+provider = "env"
+required = ["ANTHROPIC_API_KEY", "HASURA_ADMIN_SECRET"]
+
+[platform.macos]
+extra_tools = ["coreutils"]

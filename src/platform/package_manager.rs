@@ -27,7 +27,15 @@ pub trait PackageManager {
 // Homebrew
 // -------------------------------------------------------------------
 
-/// Homebrew package manager (macOS / Linux).
+/// Homebrew package manager — primary for macOS, Ubuntu, and WSL Ubuntu.
+///
+/// Homebrew (Linuxbrew on Linux) is the preferred package manager for all
+/// supported platforms because it provides up-to-date tool versions without
+/// requiring sudo. `great apply` step 2b auto-installs Homebrew if missing
+/// on macOS, Ubuntu bare metal, or Ubuntu under WSL2.
+///
+/// Apt is kept only as a fallback for system-level packages that must come
+/// from OS repos (e.g. docker, chrome, build-essential).
 pub struct Homebrew;
 
 impl PackageManager for Homebrew {
@@ -108,7 +116,12 @@ impl PackageManager for Homebrew {
 // Apt
 // -------------------------------------------------------------------
 
-/// Apt package manager (Debian / Ubuntu).
+/// Apt package manager (Debian / Ubuntu) — fallback only.
+///
+/// Used as a last resort for system-level packages that aren't in Homebrew
+/// or need OS-repo versions (e.g. docker-ce from Docker's apt repo, google-chrome
+/// from Google's repo, build-essential). For regular CLI tools, Homebrew is
+/// preferred because it doesn't require sudo and ships newer versions.
 pub struct Apt;
 
 impl PackageManager for Apt {
@@ -323,18 +336,20 @@ impl PackageManager for NpmInstaller {
 // Factory
 // -------------------------------------------------------------------
 
-/// Get all available package managers for the current platform.
+/// Get all available package managers for the current platform, ordered by preference.
+///
+/// Order: Homebrew (preferred) → Cargo → npm → Apt (fallback).
+/// Homebrew is first because it provides up-to-date versions without sudo on all
+/// supported platforms (macOS, Ubuntu, WSL Ubuntu). Apt is last because it requires
+/// sudo and often ships older versions — it's kept as a fallback for system-level
+/// packages only.
 pub fn available_managers() -> Vec<Box<dyn PackageManager>> {
     let mut managers: Vec<Box<dyn PackageManager>> = Vec::new();
 
+    // Homebrew first — primary package manager on macOS, Ubuntu, and WSL Ubuntu
     let brew = Homebrew;
     if brew.is_available() {
         managers.push(Box::new(brew));
-    }
-
-    let apt = Apt;
-    if apt.is_available() {
-        managers.push(Box::new(apt));
     }
 
     let cargo = CargoInstaller;
@@ -345,6 +360,12 @@ pub fn available_managers() -> Vec<Box<dyn PackageManager>> {
     let npm = NpmInstaller;
     if npm.is_available() {
         managers.push(Box::new(npm));
+    }
+
+    // Apt last — fallback for system-level packages (docker, chrome, build-essential)
+    let apt = Apt;
+    if apt.is_available() {
+        managers.push(Box::new(apt));
     }
 
     managers

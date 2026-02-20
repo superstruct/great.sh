@@ -30,6 +30,12 @@ struct Template {
     content: &'static str,
 }
 
+/// Built-in templates.
+///
+/// Each template can declare its own `[tools.cli]` entries — `great apply`
+/// installs them alongside any tools the user has added manually. This is
+/// how domain-specific templates (e.g. SaaS requiring hasura-cli) pull in
+/// the CLI tools they need without the user having to know upfront.
 fn builtin_templates() -> Vec<Template> {
     vec![
         Template {
@@ -46,6 +52,11 @@ fn builtin_templates() -> Vec<Template> {
             name: "ai-minimal",
             description: "Minimal AI setup with Claude only",
             content: include_str!("../../templates/ai-minimal.toml"),
+        },
+        Template {
+            name: "saas-multi-tenant",
+            description: "Multi-tenant SaaS with Hasura, AWS CDK, and AI agents",
+            content: include_str!("../../templates/saas-multi-tenant.toml"),
         },
     ]
 }
