@@ -188,9 +188,9 @@ fn run_update() -> Result<()> {
     rt.block_on(fetch_templates_from_github())
 }
 
-/// Download template files from the great-sh/great GitHub repository.
+/// Download template files from the superstruct/great.sh GitHub repository.
 async fn fetch_templates_from_github() -> Result<()> {
-    let api_url = "https://api.github.com/repos/great-sh/great/contents/templates";
+    let api_url = "https://api.github.com/repos/superstruct/great.sh/contents/templates";
 
     let client = reqwest::Client::new();
     let response = client

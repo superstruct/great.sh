@@ -4,7 +4,7 @@ set -euo pipefail
 # great.sh installer
 # Usage: curl -sSL https://great.sh/install.sh | bash
 
-REPO="great-sh/great"
+REPO="superstruct/great.sh"
 INSTALL_DIR="${GREAT_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {

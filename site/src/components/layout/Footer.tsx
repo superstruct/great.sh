@@ -12,7 +12,7 @@ export function Footer() {
           </div>
           <div className="flex items-center gap-6 text-text-secondary text-sm">
             <a
-              href="https://github.com/great-sh/great"
+              href="https://github.com/superstruct/great.sh"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-text-primary transition-colors flex items-center gap-1.5"

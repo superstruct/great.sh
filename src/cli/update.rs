@@ -8,7 +8,7 @@ use crate::platform;
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// GitHub repository for release checking.
-const GITHUB_REPO: &str = "great-sh/great";
+const GITHUB_REPO: &str = "superstruct/great.sh";
 
 #[derive(ClapArgs)]
 pub struct Args {
@@ -55,7 +55,7 @@ async fn check_for_update() -> Result<()> {
         }
         Err(e) => {
             output::error(&format!("Failed to check for updates: {}", e));
-            output::info("Check https://github.com/great-sh/great/releases manually.");
+            output::info("Check https://github.com/superstruct/great.sh/releases manually.");
         }
     }
 
