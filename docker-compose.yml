@@ -1,9 +1,11 @@
 # great.sh cross-platform test rigs
 #
 # Usage:
-#   docker compose up --build ubuntu    # Test on Ubuntu 22.04
-#   docker compose up --build fedora    # Test on Fedora 39
-#   docker compose run ubuntu bash      # Interactive shell
+#   docker compose up --build ubuntu      # Test on Ubuntu 22.04
+#   docker compose up --build fedora      # Test on Fedora 39
+#   docker compose run ubuntu bash        # Interactive shell
+#   docker compose run macos-cross        # Cross-compile macOS binaries
+#   docker compose up macos               # Boot macOS VM (requires KVM)
 #
 # Each container builds the great CLI from source and runs the test suite.
 
@@ -32,6 +34,41 @@ services:
     environment:
       - PLATFORM=fedora
 
+  # macOS cross-compilation via osxcross (x86_64 + aarch64)
+  macos-cross:
+    build:
+      context: .
+      dockerfile: docker/cross-macos.Dockerfile
+    volumes:
+      - .:/workspace:ro
+      - cargo-cache-macos:/opt/rust/registry
+      - ./test-files:/workspace/test-files
+    working_dir: /build
+    command: ["bash", "/workspace/docker/cross-test-macos.sh"]
+
+  # macOS VM for real execution testing (requires KVM)
+  macos:
+    image: dockurr/macos
+    environment:
+      VERSION: "15"
+      RAM_SIZE: "4G"
+      CPU_CORES: "4"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8007:8006"
+      - "5900:5900/tcp"
+      - "5900:5900/udp"
+    volumes:
+      - ./macos-storage:/storage
+      - ./test-files:/shared
+    restart: unless-stopped
+    stop_grace_period: 2m
+
 volumes:
   cargo-cache-ubuntu:
   cargo-cache-fedora:
+  cargo-cache-macos:
