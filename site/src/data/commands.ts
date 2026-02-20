@@ -1,4 +1,4 @@
-export const installCommand = 'curl -sS https://great.sh/install.sh | sh'
+export const installCommand = 'curl -sSL https://great.sh/install.sh | sh'
 
 export const initWizardOutput = `$ great init
 
