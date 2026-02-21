@@ -105,6 +105,7 @@ fn doctor_runs_diagnostics() {
 }
 
 #[test]
+#[ignore] // performs real package installs (e.g. Homebrew) — too slow for CI
 fn doctor_fix_runs_without_crash() {
     let dir = TempDir::new().unwrap();
     great()

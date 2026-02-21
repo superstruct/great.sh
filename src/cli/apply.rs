@@ -47,11 +47,7 @@ fn has_nerd_font(dir: &Path, file_prefix: &str) -> bool {
     };
     entries
         .filter_map(|e| e.ok())
-        .any(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(file_prefix)
-        })
+        .any(|e| e.file_name().to_string_lossy().starts_with(file_prefix))
 }
 
 /// Return true if the platform-appropriate Nerd Font is already installed.
@@ -84,11 +80,9 @@ fn download_and_install_nerd_font(home: &Path, spec: &NerdFontSpec) -> Result<()
 
     let sp = output::spinner(&format!("Downloading {} ...", spec.display_name));
 
-    let response = reqwest::blocking::get(&url)
-        .with_context(|| format!("failed to download {}", url))?;
-    let bytes = response
-        .bytes()
-        .context("failed to read font zip bytes")?;
+    let response =
+        reqwest::blocking::get(&url).with_context(|| format!("failed to download {}", url))?;
+    let bytes = response.bytes().context("failed to read font zip bytes")?;
 
     sp.set_message(format!("Extracting {} ...", spec.display_name));
 
@@ -155,15 +149,18 @@ fn copy_fonts_to_windows(home: &Path, file_prefix: &str) -> Result<()> {
     }
 
     let linux_font_dir = home.join(".local/share/fonts");
-    let entries = std::fs::read_dir(&linux_font_dir)
-        .context("failed to read Linux font directory")?;
+    let entries =
+        std::fs::read_dir(&linux_font_dir).context("failed to read Linux font directory")?;
 
     for entry in entries.filter_map(|e| e.ok()) {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with(file_prefix) && name.ends_with(".ttf") {
             let dest = win_font_dir.join(&name);
             if let Err(e) = std::fs::copy(entry.path(), &dest) {
-                output::warning(&format!("  Could not copy {} to Windows fonts: {}", name, e));
+                output::warning(&format!(
+                    "  Could not copy {} to Windows fonts: {}",
+                    name, e
+                ));
             }
         }
     }
@@ -228,7 +225,10 @@ fn install_nerd_font(dry_run: bool, platform_info: &PlatformInfo) {
                     }
                 }
                 Err(e) => {
-                    output::error(&format!("  {} — failed to install: {}", spec.display_name, e));
+                    output::error(&format!(
+                        "  {} — failed to install: {}",
+                        spec.display_name, e
+                    ));
                 }
             }
         }
@@ -246,7 +246,10 @@ fn install_nerd_font(dry_run: bool, platform_info: &PlatformInfo) {
                     output::success(&format!("  {} — installed", spec.display_name));
                 }
                 Err(e) => {
-                    output::error(&format!("  {} — failed to install: {}", spec.display_name, e));
+                    output::error(&format!(
+                        "  {} — failed to install: {}",
+                        spec.display_name, e
+                    ));
                 }
             }
         }
