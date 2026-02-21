@@ -371,3 +371,761 @@ fn apply_no_config_fails() {
         .failure()
         .stderr(predicate::str::contains("great.toml"));
 }
+
+// -----------------------------------------------------------------------
+// Statusline
+// -----------------------------------------------------------------------
+
+#[test]
+fn statusline_empty_stdin_exits_zero() {
+    great()
+        .arg("statusline")
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_no_stdin_exits_zero() {
+    great()
+        .arg("statusline")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_prints_one_line() {
+    let output = great()
+        .arg("statusline")
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "statusline must print exactly one line, got: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn statusline_no_color_no_ansi() {
+    let output = great()
+        .arg("statusline")
+        .arg("--no-color")
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains('\x1b'),
+        "output must contain no ANSI escapes with --no-color: {:?}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_no_unicode_ascii_only() {
+    let output = great()
+        .arg("statusline")
+        .arg("--no-unicode")
+        .arg("--no-color")
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.is_ascii(),
+        "output must be ASCII-only with --no-unicode: {:?}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_with_state_file() {
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+    std::fs::write(
+        &state_path,
+        r#"{
+            "loop_id": "test",
+            "started_at": 1740134400,
+            "agents": [
+                {"id": 1, "name": "nightingale", "status": "done", "updated_at": 1740134450},
+                {"id": 2, "name": "lovelace", "status": "running", "updated_at": 1740134480},
+                {"id": 3, "name": "socrates", "status": "queued", "updated_at": 1740134400},
+                {"id": 4, "name": "humboldt", "status": "error", "updated_at": 1740134400},
+                {"id": 5, "name": "davinci", "status": "idle", "updated_at": 1740134400}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    // Create a temporary config that points to our state file
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    // Use GREAT_STATUSLINE_CONFIG env var to point to our custom config
+    great()
+        .arg("statusline")
+        .arg("--no-color")
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin(r#"{"cost_usd": 0.05, "context_tokens": 10000, "context_window": 200000}"#)
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_help_shows_description() {
+    great()
+        .args(["statusline", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("statusline"));
+}
+
+#[test]
+fn statusline_width_override() {
+    let output = great()
+        .args(["statusline", "--width", "60", "--no-color", "--no-unicode"])
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.is_empty());
+}
+
+// -----------------------------------------------------------------------
+// Statusline — adversarial tests (Turing)
+// -----------------------------------------------------------------------
+
+#[test]
+fn statusline_no_color_env_var_no_ansi() {
+    // Spec: NO_COLOR=1 env var must suppress all ANSI escape sequences
+    let output = great()
+        .arg("statusline")
+        .env("NO_COLOR", "1")
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains('\x1b'),
+        "NO_COLOR=1 must suppress ANSI escapes: {:?}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_malformed_json_stdin_exits_zero() {
+    // Spec: malformed stdin must not crash; exit 0
+    great()
+        .arg("statusline")
+        .write_stdin("this is not json at all {{{")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_binary_garbage_stdin_exits_zero() {
+    // Spec: binary garbage on stdin must not crash; exit 0
+    let garbage: Vec<u8> = (0..256).map(|i| i as u8).collect();
+    great()
+        .arg("statusline")
+        .write_stdin(garbage)
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_null_bytes_stdin_exits_zero() {
+    // Edge: null bytes embedded in stdin
+    great()
+        .arg("statusline")
+        .write_stdin(b"\x00\x00\x00\x00" as &[u8])
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_14_agents_medium_width_one_indicator_each() {
+    // Spec acceptance criterion: 14-agent state, medium width,
+    // one indicator per agent
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // 14 agents in mixed statuses
+    let agents_json: Vec<String> = [
+        ("nightingale", "done"),
+        ("lovelace", "done"),
+        ("socrates", "done"),
+        ("humboldt", "done"),
+        ("davinci", "running"),
+        ("vonbraun", "running"),
+        ("turing", "queued"),
+        ("kerckhoffs", "queued"),
+        ("rams", "idle"),
+        ("nielsen", "idle"),
+        ("knuth", "error"),
+        ("gutenberg", "idle"),
+        ("hopper", "idle"),
+        ("deming", "done"),
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, (name, status))| {
+        format!(
+            r#"{{"id": {}, "name": "{}", "status": "{}", "updated_at": {}}}"#,
+            i + 1,
+            name,
+            status,
+            now - 2
+        )
+    })
+    .collect();
+
+    let state_json = format!(
+        r#"{{"loop_id": "test", "started_at": {}, "agents": [{}]}}"#,
+        now - 120,
+        agents_json.join(", ")
+    );
+
+    std::fs::write(&state_path, state_json).unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    // Medium mode: width 100 (>= 80, <= 120)
+    let output = great()
+        .args(["statusline", "--width", "100", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.trim();
+
+    // In medium mode with ASCII, each agent gets one symbol: *, v, ., X, or -
+    // Count status indicator characters in the agent segment
+    // The medium renderer produces symbols without spaces between them
+    // We expect exactly 14 indicator symbols in sequence
+    let agent_symbols: usize = line
+        .chars()
+        .filter(|c| matches!(c, '*' | 'v' | '.' | 'X' | '-'))
+        .count();
+    assert!(
+        agent_symbols >= 14,
+        "expected at least 14 agent indicator symbols in medium mode, got {}: {}",
+        agent_symbols,
+        line
+    );
+}
+
+#[test]
+fn statusline_zero_agents_valid_state_exits_zero() {
+    // Edge: valid state file with zero agents
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    std::fs::write(
+        &state_path,
+        format!(r#"{{"loop_id": "test", "started_at": {}, "agents": []}}"#, now - 60),
+    )
+    .unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    let output = great()
+        .args(["statusline", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("idle"),
+        "zero agents should render 'idle': {}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_100_agents_exits_zero() {
+    // Edge: 100+ agents should not crash, should truncate at 30
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let agents_json: Vec<String> = (1..=100)
+        .map(|i| {
+            format!(
+                r#"{{"id": {}, "name": "agent{}", "status": "running", "updated_at": {}}}"#,
+                i, i, now - 2
+            )
+        })
+        .collect();
+
+    let state_json = format!(
+        r#"{{"loop_id": "test", "started_at": {}, "agents": [{}]}}"#,
+        now - 60,
+        agents_json.join(", ")
+    );
+
+    std::fs::write(&state_path, state_json).unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    // Wide mode
+    let output = great()
+        .args(["statusline", "--width", "200", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should contain truncation indicator
+    assert!(
+        stdout.contains("..."),
+        "100 agents should trigger truncation ellipsis: {}",
+        stdout
+    );
+    // Should still be exactly one line
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "must print exactly one line, got: {:?}", lines);
+}
+
+#[test]
+fn statusline_absent_state_file_renders_idle() {
+    // Spec: absent state file -> exits 0, renders idle summary
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    // Point state_file to a path that does not exist
+    std::fs::write(
+        &config_path,
+        format!(
+            "state_file = {:?}\n",
+            dir.path().join("nonexistent-state.json").to_str().unwrap()
+        ),
+    )
+    .unwrap();
+
+    let output = great()
+        .args(["statusline", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("idle"),
+        "absent state file should render 'idle': {}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_malformed_state_file_renders_err() {
+    // Spec: malformed state file -> exits 0, renders "ERR:state"
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+    std::fs::write(&state_path, "this is not json!!!").unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    let output = great()
+        .args(["statusline", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ERR:state"),
+        "malformed state file should render 'ERR:state': {}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_malformed_config_uses_defaults() {
+    // Spec: malformed config TOML -> use defaults silently, exit 0
+    let dir = TempDir::new().unwrap();
+    let config_path = dir.path().join("statusline.toml");
+    std::fs::write(&config_path, "this = [[[is not valid toml!!!").unwrap();
+
+    great()
+        .args(["statusline", "--no-color"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_unknown_agent_status_exits_zero() {
+    // Forward-compatibility: unknown status values should not crash
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    std::fs::write(
+        &state_path,
+        format!(
+            r#"{{"loop_id": "test", "started_at": {}, "agents": [
+                {{"id": 1, "name": "future", "status": "hyperspacing", "updated_at": {}}},
+                {{"id": 2, "name": "time_traveler", "status": "quantum_superposition", "updated_at": {}}}
+            ]}}"#,
+            now - 60,
+            now - 2,
+            now - 2
+        ),
+    )
+    .unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    great()
+        .args(["statusline", "--no-color", "--no-unicode", "--width", "150"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_unicode_agent_names_exits_zero() {
+    // Edge: agent names with unicode characters should not crash
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    std::fs::write(
+        &state_path,
+        format!(
+            r#"{{"loop_id": "test", "agents": [
+                {{"id": 1, "name": "\u00e9l\u00e8ve", "status": "done", "updated_at": {}}},
+                {{"id": 2, "name": "\u5f00\u53d1\u8005", "status": "running", "updated_at": {}}}
+            ]}}"#,
+            now - 2,
+            now - 2
+        ),
+    )
+    .unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    great()
+        .args(["statusline", "--no-color"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_negative_cost_exits_zero() {
+    // Edge: negative cost_usd should not crash (spec says display as-is)
+    let output = great()
+        .args(["statusline", "--no-color", "--no-unicode", "--width", "150"])
+        .write_stdin(r#"{"cost_usd": -0.01, "context_tokens": 1000, "context_window": 200000}"#)
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("$-0.01"),
+        "negative cost should display as '$-0.01': {}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_context_window_zero_no_crash() {
+    // Edge: context_window = 0 should not cause division by zero
+    great()
+        .args(["statusline", "--no-color", "--width", "150"])
+        .write_stdin(r#"{"context_tokens": 1000, "context_window": 0}"#)
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_very_large_cost_exits_zero() {
+    // Edge: very large cost value
+    let output = great()
+        .args(["statusline", "--no-color", "--no-unicode", "--width", "150"])
+        .write_stdin(r#"{"cost_usd": 999999.99}"#)
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("$999999.99"),
+        "large cost should render: {}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_extra_json_fields_stdin_ignored() {
+    // Forward-compat: extra fields in stdin JSON should be silently ignored
+    great()
+        .args(["statusline", "--no-color"])
+        .write_stdin(r#"{"cost_usd": 0.05, "unknown_field": true, "nested": {"a": 1}}"#)
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_state_file_path_with_spaces() {
+    // Edge: state file path containing spaces
+    let dir = TempDir::new().unwrap();
+    let spaced_dir = dir.path().join("path with spaces");
+    std::fs::create_dir_all(&spaced_dir).unwrap();
+    let state_path = spaced_dir.join("state.json");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    std::fs::write(
+        &state_path,
+        format!(
+            r#"{{"loop_id": "test", "agents": [
+                {{"id": 1, "name": "test", "status": "done", "updated_at": {}}}
+            ]}}"#,
+            now - 2
+        ),
+    )
+    .unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    great()
+        .args(["statusline", "--no-color"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_width_zero_exits_zero() {
+    // Edge: width=0 should not panic or crash
+    great()
+        .args(["statusline", "--width", "0", "--no-color"])
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_width_one_exits_zero() {
+    // Edge: width=1 (extreme narrow) should not panic
+    great()
+        .args(["statusline", "--width", "1", "--no-color"])
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_width_max_exits_zero() {
+    // Edge: max u16 width should not panic
+    great()
+        .args(["statusline", "--width", "65535", "--no-color"])
+        .write_stdin("{}")
+        .assert()
+        .success();
+}
+
+#[test]
+fn statusline_all_modes_print_exactly_one_line() {
+    // Verify one-line invariant across all three width modes
+    for width in &["60", "100", "150"] {
+        let output = great()
+            .args(["statusline", "--width", width, "--no-color"])
+            .write_stdin("{}")
+            .output()
+            .expect("failed to run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(
+            lines.len(),
+            1,
+            "width={}: must print exactly one line, got {:?}",
+            width,
+            lines
+        );
+    }
+}
+
+#[test]
+fn statusline_no_color_flag_and_env_combined() {
+    // Both --no-color and NO_COLOR=1 set simultaneously
+    let output = great()
+        .arg("statusline")
+        .arg("--no-color")
+        .env("NO_COLOR", "1")
+        .write_stdin("{}")
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains('\x1b'),
+        "combined --no-color + NO_COLOR=1 must suppress ANSI: {:?}",
+        stdout
+    );
+}
+
+#[test]
+fn statusline_with_state_file_renders_agents() {
+    let dir = TempDir::new().unwrap();
+    let state_path = dir.path().join("state.json");
+
+    // Use a recent timestamp so agents don't time out
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    std::fs::write(
+        &state_path,
+        format!(
+            r#"{{
+            "loop_id": "test",
+            "started_at": {},
+            "agents": [
+                {{"id": 1, "name": "nightingale", "status": "done", "updated_at": {}}},
+                {{"id": 2, "name": "lovelace", "status": "running", "updated_at": {}}},
+                {{"id": 3, "name": "socrates", "status": "error", "updated_at": {}}}
+            ]
+        }}"#,
+            now - 120,
+            now - 5,
+            now - 2,
+            now - 3,
+        ),
+    )
+    .unwrap();
+
+    let config_dir = dir.path().join("config").join("great");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("statusline.toml");
+    std::fs::write(
+        &config_path,
+        format!("state_file = {:?}\n", state_path.to_str().unwrap()),
+    )
+    .unwrap();
+
+    // Wide mode (150 cols), no color for easy assertion
+    let output = great()
+        .args(["statusline", "--width", "150", "--no-color", "--no-unicode"])
+        .env("GREAT_STATUSLINE_CONFIG", &config_path)
+        .write_stdin(r#"{"cost_usd": 1.50, "context_tokens": 90000, "context_window": 200000}"#)
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should contain "loop", cost, context info, and agent data
+    assert!(stdout.contains("loop"), "should contain 'loop' label: {}", stdout);
+    assert!(stdout.contains("$1.50"), "should contain cost: {}", stdout);
+    assert!(stdout.contains("90K/200K"), "should contain context: {}", stdout);
+}

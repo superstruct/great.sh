@@ -213,6 +213,9 @@ fn run_install(project: bool) -> Result<()> {
                     "Grep",
                     "LS"
                 ]
+            },
+            "statusLine": {
+                "command": "great statusline"
             }
         });
         let formatted = serde_json::to_string_pretty(&default_settings)
@@ -220,6 +223,34 @@ fn run_install(project: bool) -> Result<()> {
         std::fs::write(&settings_path, formatted)
             .context("failed to write ~/.claude/settings.json")?;
         output::success("Settings with Agent Teams enabled -> ~/.claude/settings.json");
+    }
+
+    // Inject statusLine key into existing settings.json if not already present
+    if settings_path.exists() {
+        let contents = std::fs::read_to_string(&settings_path)
+            .context("failed to read ~/.claude/settings.json for statusLine injection")?;
+        match serde_json::from_str::<serde_json::Value>(&contents) {
+            Ok(mut val) => {
+                if let Some(obj) = val.as_object_mut() {
+                    if !obj.contains_key("statusLine") {
+                        obj.insert(
+                            "statusLine".to_string(),
+                            serde_json::json!({"command": "great statusline"}),
+                        );
+                        let formatted = serde_json::to_string_pretty(&val)
+                            .context("failed to serialize settings.json")?;
+                        std::fs::write(&settings_path, formatted)
+                            .context("failed to write ~/.claude/settings.json")?;
+                        output::success("Statusline registered in ~/.claude/settings.json");
+                    }
+                }
+            }
+            Err(_) => {
+                output::warning(
+                    "settings.json is not valid JSON; skipping statusLine injection",
+                );
+            }
+        }
     }
 
     // Project working state

@@ -7,6 +7,7 @@ pub mod loop_cmd;
 pub mod mcp;
 pub mod output;
 pub mod status;
+pub mod statusline;
 pub mod sync;
 pub mod template;
 pub mod tuning;
@@ -69,4 +70,7 @@ pub enum Command {
 
     /// Install and manage the great.sh Loop agent team
     Loop(loop_cmd::Args),
+
+    /// Render a single statusline for Claude Code (called every 300ms)
+    Statusline(statusline::Args),
 }

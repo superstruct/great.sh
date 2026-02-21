@@ -25,5 +25,6 @@ fn main() -> Result<()> {
         Command::Diff(args) => cli::diff::run(args),
         Command::Template(args) => cli::template::run(args),
         Command::Loop(args) => cli::loop_cmd::run(args),
+        Command::Statusline(args) => cli::statusline::run(args),
     }
 }
