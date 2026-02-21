@@ -78,11 +78,7 @@ pub fn ensure_git(dry_run: bool, platform: &Platform) {
         for (cmd, args) in steps {
             let status = Command::new(cmd).args(*args).status();
             if !matches!(status, Ok(s) if s.success()) {
-                output::error(&format!(
-                    "  git — failed at: {} {}",
-                    cmd,
-                    args.join(" ")
-                ));
+                output::error(&format!("  git — failed at: {} {}", cmd, args.join(" ")));
                 return;
             }
         }
@@ -140,10 +136,7 @@ pub fn ensure_build_essential(dry_run: bool, platform: &Platform) {
             return;
         }
 
-        run_sudo_apt_install(
-            &["build-essential", "procps", "file"],
-            "build-essential",
-        );
+        run_sudo_apt_install(&["build-essential", "procps", "file"], "build-essential");
     } else {
         // Other Linux distros — just note it
         if dry_run {
@@ -209,7 +202,9 @@ pub fn ensure_docker(dry_run: bool, info: &PlatformInfo) {
             output::success("  Docker — installed and daemon running");
         } else {
             output::warning("  Docker — installed but daemon is not running");
-            output::info("  Start it with: sudo systemctl start docker (Linux) or launch Docker Desktop");
+            output::info(
+                "  Start it with: sudo systemctl start docker (Linux) or launch Docker Desktop",
+            );
         }
         println!();
         return;
@@ -262,7 +257,12 @@ fn install_docker_apt(distro: &LinuxDistro) {
     // Install prerequisites for the Docker repo
     let prereqs = Command::new("sudo")
         .args([
-            "apt-get", "install", "-y", "ca-certificates", "curl", "gnupg",
+            "apt-get",
+            "install",
+            "-y",
+            "ca-certificates",
+            "curl",
+            "gnupg",
         ])
         .status();
     if !matches!(prereqs, Ok(s) if s.success()) {
@@ -276,10 +276,7 @@ fn install_docker_apt(distro: &LinuxDistro) {
         .args(["install", "-m", "0755", "-d", keyring_dir])
         .status();
 
-    let gpg_url = format!(
-        "https://download.docker.com/linux/{}/gpg",
-        distro_name
-    );
+    let gpg_url = format!("https://download.docker.com/linux/{}/gpg", distro_name);
     let gpg_status = Command::new("bash")
         .args([
             "-c",
@@ -307,9 +304,7 @@ fn install_docker_apt(distro: &LinuxDistro) {
     }
 
     // Install Docker packages
-    let update = Command::new("sudo")
-        .args(["apt-get", "update"])
-        .status();
+    let update = Command::new("sudo").args(["apt-get", "update"]).status();
     if !matches!(update, Ok(s) if s.success()) {
         output::error("  Docker — apt-get update failed");
         return;
@@ -381,9 +376,7 @@ fn run_sudo_apt_install(packages: &[&str], display_name: &str) {
     args.extend_from_slice(packages);
     let status = Command::new("sudo").args(&args).status();
     match status {
-        Ok(s) if s.success() => {
-            output::success(&format!("  {} — installed via apt", display_name))
-        }
+        Ok(s) if s.success() => output::success(&format!("  {} — installed via apt", display_name)),
         _ => output::error(&format!(
             "  {} — failed to install. Run: sudo apt-get install -y {}",
             display_name,
@@ -397,7 +390,10 @@ fn run_xcode_select_install(display_name: &str) {
     let status = Command::new("xcode-select").arg("--install").status();
     match status {
         Ok(s) if s.success() => {
-            output::success(&format!("  {} — Xcode CLI tools install triggered", display_name));
+            output::success(&format!(
+                "  {} — Xcode CLI tools install triggered",
+                display_name
+            ));
             output::info("  Follow the system dialog to complete installation");
         }
         _ => {

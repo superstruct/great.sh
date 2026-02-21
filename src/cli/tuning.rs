@@ -100,7 +100,9 @@ fn tune_inotify_watches(dry_run: bool) {
             output::success("  Persisted to /etc/sysctl.d/99-great.conf");
         }
         _ => {
-            output::warning("  Could not persist to /etc/sysctl.d/99-great.conf (change is temporary)");
+            output::warning(
+                "  Could not persist to /etc/sysctl.d/99-great.conf (change is temporary)",
+            );
         }
     }
 }
