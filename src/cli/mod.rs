@@ -1,4 +1,5 @@
 pub mod apply;
+pub mod bootstrap;
 pub mod diff;
 pub mod doctor;
 pub mod init;
@@ -8,6 +9,7 @@ pub mod output;
 pub mod status;
 pub mod sync;
 pub mod template;
+pub mod tuning;
 pub mod update;
 pub mod vault;
 

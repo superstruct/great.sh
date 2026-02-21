@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 
-use crate::cli::output;
+use crate::cli::{bootstrap, output, tuning};
 use crate::config;
 use crate::platform::package_manager;
-use crate::platform::{self, command_exists, Platform};
+use crate::platform::{self, command_exists, Platform, PlatformInfo};
 
 /// Arguments for the `great doctor` subcommand.
 #[derive(ClapArgs)]
@@ -49,6 +49,14 @@ enum FixAction {
     CreateClaudeDir,
     /// Add ~/.local/bin to PATH in shell profile.
     AddLocalBinToPath,
+    /// Install a system prerequisite (curl, git, build-essential, unzip).
+    InstallSystemPrerequisite { name: String },
+    /// Install Docker CE via official apt repository.
+    InstallDocker,
+    /// Install Claude Code via the official installer.
+    InstallClaudeCode,
+    /// Fix inotify max_user_watches below threshold.
+    FixInotifyWatches,
 }
 
 /// Run the `great doctor` diagnostic command.
@@ -62,21 +70,31 @@ pub fn run(args: Args) -> Result<()> {
     println!();
 
     let mut result = DiagnosticResult::default();
+    let info = platform::detect_platform_info();
 
     // 1. Platform check
     check_platform(&mut result);
 
-    // 2. Essential tools check
+    // 2. System prerequisites check
+    check_system_prerequisites(&mut result, &info);
+
+    // 3. Essential tools check
     check_essential_tools(&mut result);
 
-    // 3. AI agents check
+    // 4. Docker check
+    check_docker(&mut result, &info);
+
+    // 5. AI agents check
     check_ai_agents(&mut result);
 
-    // 4. Config check
+    // 6. Config check
     check_config(&mut result);
 
-    // 5. Shell check
+    // 7. Shell check
     check_shell(&mut result);
+
+    // 8. System tuning check (Linux/WSL only)
+    check_system_tuning(&mut result, &info);
 
     // Attempt auto-fixes if --fix was passed
     if args.fix && !result.fixable.is_empty() {
@@ -157,6 +175,30 @@ pub fn run(args: Args) -> Result<()> {
                             Err(e) => output::error(&format!("  Failed: {}", e)),
                         }
                     }
+                }
+                FixAction::InstallSystemPrerequisite { name } => {
+                    match name.as_str() {
+                        "curl" => bootstrap::ensure_curl(false, &info.platform),
+                        "git" => bootstrap::ensure_git(false, &info.platform),
+                        "build-essential" => {
+                            bootstrap::ensure_build_essential(false, &info.platform)
+                        }
+                        "unzip" => bootstrap::ensure_unzip(false, &info.platform),
+                        _ => output::error(&format!("  Unknown prerequisite: {}", name)),
+                    }
+                    fixed += 1;
+                }
+                FixAction::InstallDocker => {
+                    bootstrap::ensure_docker(false, &info);
+                    fixed += 1;
+                }
+                FixAction::InstallClaudeCode => {
+                    bootstrap::ensure_claude_code(false);
+                    fixed += 1;
+                }
+                FixAction::FixInotifyWatches => {
+                    tuning::apply_system_tuning(false, &info);
+                    fixed += 1;
                 }
             }
         }
@@ -379,8 +421,12 @@ fn check_ai_agents(result: &mut DiagnosticResult) {
     } else {
         fail(
             result,
-            "Claude Code: not found — install: npm install -g @anthropic-ai/claude-code",
+            "Claude Code: not found — install: curl -fsSL https://claude.ai/install.sh | bash",
         );
+        result.fixable.push(FixableIssue {
+            description: "Install Claude Code".to_string(),
+            action: FixAction::InstallClaudeCode,
+        });
     }
 
     // Check OpenAI Codex (optional)
@@ -489,6 +535,176 @@ fn check_shell(result: &mut DiagnosticResult) {
             result.fixable.push(FixableIssue {
                 description: "Add ~/.local/bin to PATH".to_string(),
                 action: FixAction::AddLocalBinToPath,
+            });
+        }
+    }
+
+    println!();
+}
+
+fn check_system_prerequisites(result: &mut DiagnosticResult, info: &PlatformInfo) {
+    output::header("System Prerequisites");
+
+    // curl
+    if command_exists("curl") {
+        pass(result, "curl: installed");
+    } else {
+        fail(result, "curl: not found");
+        result.fixable.push(FixableIssue {
+            description: "Install curl".to_string(),
+            action: FixAction::InstallSystemPrerequisite {
+                name: "curl".to_string(),
+            },
+        });
+    }
+
+    // git
+    if command_exists("git") {
+        pass(result, "git: installed");
+    } else {
+        fail(result, "git: not found");
+        result.fixable.push(FixableIssue {
+            description: "Install git".to_string(),
+            action: FixAction::InstallSystemPrerequisite {
+                name: "git".to_string(),
+            },
+        });
+    }
+
+    // build-essential / Xcode CLI tools
+    if matches!(info.platform, Platform::MacOS { .. }) {
+        let has_xcode = std::process::Command::new("xcode-select")
+            .arg("-p")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if has_xcode {
+            pass(result, "Xcode CLI tools: installed");
+        } else {
+            fail(
+                result,
+                "Xcode CLI tools: not found — run: xcode-select --install",
+            );
+            result.fixable.push(FixableIssue {
+                description: "Install Xcode CLI tools".to_string(),
+                action: FixAction::InstallSystemPrerequisite {
+                    name: "build-essential".to_string(),
+                },
+            });
+        }
+    } else if bootstrap::is_apt_distro(&info.platform) {
+        let has_be = std::process::Command::new("dpkg")
+            .args(["-s", "build-essential"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if has_be {
+            pass(result, "build-essential: installed");
+        } else {
+            fail(
+                result,
+                "build-essential: not found — run: sudo apt-get install -y build-essential",
+            );
+            result.fixable.push(FixableIssue {
+                description: "Install build-essential".to_string(),
+                action: FixAction::InstallSystemPrerequisite {
+                    name: "build-essential".to_string(),
+                },
+            });
+        }
+    }
+
+    // unzip
+    if command_exists("unzip") {
+        pass(result, "unzip: installed");
+    } else {
+        fail(result, "unzip: not found");
+        result.fixable.push(FixableIssue {
+            description: "Install unzip".to_string(),
+            action: FixAction::InstallSystemPrerequisite {
+                name: "unzip".to_string(),
+            },
+        });
+    }
+
+    println!();
+}
+
+fn check_docker(result: &mut DiagnosticResult, info: &PlatformInfo) {
+    output::header("Docker");
+
+    if command_exists("docker") {
+        let daemon_ok = std::process::Command::new("docker")
+            .arg("info")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if daemon_ok {
+            pass(result, "Docker: installed and daemon running");
+        } else {
+            warn(result, "Docker: installed but daemon is not running");
+        }
+    } else {
+        let msg = match &info.platform {
+            Platform::MacOS { .. } => {
+                "Docker: not found — install Docker Desktop (https://www.docker.com/products/docker-desktop/) or OrbStack (https://orbstack.dev/)"
+            }
+            Platform::Wsl { .. } => {
+                "Docker: not found — install Docker Desktop for Windows with WSL2 backend (https://docs.docker.com/desktop/wsl/)"
+            }
+            _ => {
+                "Docker: not found"
+            }
+        };
+
+        fail(result, msg);
+
+        // Only offer auto-fix on apt-based Linux (not WSL or macOS — those need GUI apps)
+        if bootstrap::is_apt_distro(&info.platform)
+            && !matches!(info.platform, Platform::Wsl { .. })
+        {
+            result.fixable.push(FixableIssue {
+                description: "Install Docker CE".to_string(),
+                action: FixAction::InstallDocker,
+            });
+        }
+    }
+
+    println!();
+}
+
+fn check_system_tuning(result: &mut DiagnosticResult, info: &PlatformInfo) {
+    if !bootstrap::is_linux_like(&info.platform) {
+        return;
+    }
+
+    output::header("System Tuning");
+
+    let (current, sufficient) = tuning::check_inotify_watches();
+    if let Some(current) = current {
+        if sufficient {
+            pass(
+                result,
+                &format!("inotify max_user_watches: {} (sufficient)", current),
+            );
+        } else {
+            fail(
+                result,
+                &format!(
+                    "inotify max_user_watches: {} (below 524288 recommended)",
+                    current
+                ),
+            );
+            result.fixable.push(FixableIssue {
+                description: "Increase inotify max_user_watches".to_string(),
+                action: FixAction::FixInotifyWatches,
             });
         }
     }

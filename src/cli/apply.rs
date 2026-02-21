@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 
 use crate::cli::output;
+use crate::cli::{bootstrap, tuning};
 use crate::config;
 use crate::platform::package_manager::{self, PackageManager};
 use crate::platform::runtime::{MiseManager, ProvisionAction};
@@ -395,7 +396,10 @@ pub fn run(args: Args) -> Result<()> {
         println!();
     }
 
-    // 2b. Ensure Homebrew is available (primary package manager for macOS, Ubuntu, and WSL Ubuntu).
+    // 2b. System prerequisites — before Homebrew since Homebrew needs curl/git/build tools.
+    bootstrap::ensure_prerequisites(args.dry_run, &info);
+
+    // 2c. Ensure Homebrew is available (primary package manager for macOS, Ubuntu, and WSL Ubuntu).
     // Homebrew (Linuxbrew) is preferred over apt for CLI tools because it provides
     // up-to-date versions without needing sudo. Apt is kept only as a fallback for
     // system-level packages (e.g. docker, chrome from official repos).
@@ -792,6 +796,17 @@ pub fn run(args: Args) -> Result<()> {
             }
         }
     }
+
+    // 8. Docker
+    bootstrap::ensure_docker(args.dry_run, &info);
+
+    // 9. Claude Code
+    output::header("Claude Code");
+    bootstrap::ensure_claude_code(args.dry_run);
+    println!();
+
+    // 10. System tuning (Linux/WSL only)
+    tuning::apply_system_tuning(args.dry_run, &info);
 
     // Summary
     if args.dry_run {

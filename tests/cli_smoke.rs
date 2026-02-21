@@ -292,6 +292,32 @@ fn update_check_runs() {
 }
 
 // -----------------------------------------------------------------------
+// Doctor — new sections
+// -----------------------------------------------------------------------
+
+#[test]
+fn doctor_checks_system_prerequisites() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("System Prerequisites"));
+}
+
+#[test]
+fn doctor_checks_docker() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Docker"));
+}
+
+// -----------------------------------------------------------------------
 // Apply
 // -----------------------------------------------------------------------
 
@@ -316,6 +342,23 @@ ripgrep = "latest"
         .assert()
         .success()
         .stderr(predicate::str::contains("Dry run mode"));
+}
+
+#[test]
+fn apply_dry_run_shows_prerequisites() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("System Prerequisites"));
 }
 
 #[test]
