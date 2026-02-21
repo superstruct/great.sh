@@ -14,7 +14,7 @@ export const features: Feature[] = [
   {
     title: 'AI Agent Orchestration',
     description:
-      'The great.sh Loop: 15 specialized AI agents installed into Claude Code with one command. Requirements, specs, builds, tests, security audits, UX reviews, docs, and deploys — orchestrated as a team. Run great loop install to set it up.',
+      'The great.sh Loop: 16 specialized AI roles installed into Claude Code with one command. Requirements, specs, builds, tests, security audits, performance checks, code reviews, UX inspections, visual reviews, docs, and deploys — orchestrated as a team. Run great loop install to set it up.',
     icon: 'brain',
   },
   {

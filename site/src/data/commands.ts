@@ -30,7 +30,7 @@ export const initWizardOutput = `$ great init
   Your AI dev environment is ready!
 
   Run \`claude\` to start Claude Code with all MCP servers.
-  Run \`great loop install\` to add the 15-agent team.`
+  Run \`great loop install\` to add the 16-role agent team.`
 
 export const sampleToml = `# great.toml — AI Dev Environment Specification
 
@@ -81,7 +81,7 @@ export const loopInstallOutput = `$ great loop install --project
   great.sh Loop -- Installing agent team
 
   [check] 15 agent personas -> ~/.claude/agents/
-  [check] 4 commands -> ~/.claude/commands/
+  [check] 5 commands -> ~/.claude/commands/
   [check] Agent Teams config -> ~/.claude/teams/loop/
   [check] Settings with Agent Teams enabled -> ~/.claude/settings.json
   [check] .tasks/ created, .gitignore updated

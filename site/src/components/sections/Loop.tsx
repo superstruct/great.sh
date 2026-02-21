@@ -8,42 +8,44 @@ const phases = [
   {
     label: 'Phase 1 -- Sequential',
     agents: [
-      { name: 'Nightingale', role: 'Requirements' },
-      { name: 'Lovelace', role: 'Spec' },
-      { name: 'Socrates', role: 'Review' },
-      { name: 'Humboldt', role: 'Scout' },
+      { name: 'Nightingale', role: 'Requirements', methodology: 'Transforms chaos into organized task files with statistical discipline' },
+      { name: 'Lovelace', role: 'Spec', methodology: 'Produces self-contained specs so precise a builder needs nothing else' },
+      { name: 'Socrates', role: 'Review', methodology: 'Adversarial plan approval gate using structured elenchus' },
+      { name: 'Humboldt', role: 'Scout', methodology: 'Maps codebase connections before anyone touches code' },
     ],
     flow: 'sequential' as const,
   },
   {
     label: 'Phase 2 -- Parallel Team',
     agents: [
-      { name: 'Da Vinci', role: 'Build' },
-      { name: 'Von Braun', role: 'Deploy' },
-      { name: 'Turing', role: 'Test' },
-      { name: 'Kerckhoffs', role: 'Security' },
-      { name: 'Nielsen', role: 'UX' },
+      { name: 'Da Vinci', role: 'Build', methodology: 'Turns specs into working code, runs all quality gates' },
+      { name: 'Turing', role: 'Test', methodology: 'Adversarial tester -- proves the build is broken' },
+      { name: 'Kerckhoffs', role: 'Security', methodology: 'Audits credentials, permissions, input validation, supply chain' },
+      { name: 'Nielsen', role: 'UX', methodology: '10 Usability Heuristics applied to every user journey' },
     ],
     flow: 'parallel' as const,
+    note: 'Wirth (Performance Sentinel) runs in parallel -- measures artifact size, flags regressions',
   },
   {
-    label: 'Phase 3 -- Finish',
+    label: 'Phase 3 -- Gate + Finish',
     agents: [
-      { name: 'Rams', role: 'Visual QA' },
-      { name: 'Hopper', role: 'Commit' },
-      { name: 'Knuth', role: 'Docs' },
-      { name: 'Gutenberg', role: 'Doc Commit' },
-      { name: 'Deming', role: 'Observe' },
+      { name: 'Dijkstra', role: 'Code Review', methodology: 'Structured programming principles -- reviews quality, complexity, structure' },
+      { name: 'Rams', role: 'Visual Review', methodology: '10 Principles of Good Design applied to output aesthetics' },
+      { name: 'Hopper', role: 'Commit', methodology: 'Never commits a broken build -- all gates must pass' },
+      { name: 'Knuth', role: 'Docs', methodology: 'Every code example must work -- docs and release notes' },
+      { name: 'Gutenberg', role: 'Doc Commit', methodology: 'Commits documentation independently of code' },
+      { name: 'Deming', role: 'Observe', methodology: 'PDCA cycle -- observer report, one config change if needed' },
     ],
     flow: 'sequential' as const,
   },
 ]
 
 const slashCommands = [
-  { cmd: '/loop', desc: 'Full development cycle' },
-  { cmd: '/bugfix', desc: 'Diagnose and fix a bug' },
-  { cmd: '/deploy', desc: 'Build, test, and ship' },
-  { cmd: '/discover', desc: 'Explore and document a codebase' },
+  { cmd: '/backlog', desc: 'Capture requirements into .tasks/backlog/ -- run this first' },
+  { cmd: '/loop', desc: 'Full 16-agent development cycle' },
+  { cmd: '/bugfix', desc: 'Targeted fix: reproduce, patch, verify, commit' },
+  { cmd: '/deploy', desc: 'Build and verify release artifacts' },
+  { cmd: '/discover', desc: 'UX discovery sweep -- Nielsen maps journeys, Nightingale files issues' },
 ]
 
 export function Loop() {
@@ -53,18 +55,22 @@ export function Loop() {
         {/* Heading */}
         <h2 className="font-display text-3xl md:text-4xl text-text-primary text-center mb-4">
           great loop{' '}
-          <span className="text-text-secondary">— 15 agents, one command</span>
+          <span className="text-text-secondary">— 16 roles, two steps</span>
         </h2>
         <p className="text-text-secondary text-center mb-16 max-w-2xl mx-auto leading-relaxed">
-          The great.sh Loop is a 15-role AI agent orchestration methodology that
+          The great.sh Loop is a 16-role AI agent orchestration methodology that
           ships inside every great.sh install. One command configures Claude Code
           with a full team: requirements analysts, spec writers, builders, testers,
-          security auditors, UX reviewers, documenters, and an observer.
-          Type{' '}
+          security auditors, performance sentinels, code reviewers, UX inspectors,
+          visual reviewers, documenters, and an observer. Type{' '}
           <code className="text-accent text-sm bg-accent-muted px-1.5 py-0.5 rounded font-mono">
-            /loop [task]
+            /backlog
           </code>{' '}
-          and the team goes to work.
+          to capture requirements, then{' '}
+          <code className="text-accent text-sm bg-accent-muted px-1.5 py-0.5 rounded font-mono">
+            /loop
+          </code>{' '}
+          to execute.
         </p>
 
         {/* Agent flow */}
@@ -90,6 +96,9 @@ export function Loop() {
                       <div className="text-text-tertiary text-xs">
                         {agent.role}
                       </div>
+                      <div className="text-text-tertiary text-xs mt-0.5 max-w-[220px]">
+                        {agent.methodology}
+                      </div>
                     </div>
                     {i < phase.agents.length - 1 && (
                       <span className="text-text-tertiary text-sm font-mono">
@@ -99,6 +108,11 @@ export function Loop() {
                   </div>
                 ))}
               </div>
+              {'note' in phase && phase.note && (
+                <div className="text-text-tertiary text-xs font-mono mt-2 pl-1">
+                  + {phase.note}
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
@@ -126,7 +140,7 @@ export function Loop() {
             className="flex flex-col justify-center"
           >
             <h3 className="font-display text-xl text-text-primary mb-6">
-              Four slash commands
+              Five slash commands
             </h3>
             <div className="space-y-4">
               {slashCommands.map((sc) => (
