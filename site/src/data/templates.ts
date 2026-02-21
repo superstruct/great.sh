@@ -13,9 +13,9 @@ export const templates: Template[] = [
     name: 'AI Full Stack (TypeScript)',
     id: 'ai-fullstack-ts',
     description:
-      'TypeScript full-stack development with Claude Code + Codex + Gemini, GitHub/Filesystem/Memory/Playwright MCP servers.',
+      'TypeScript full-stack development with Claude Code + Codex + Gemini, Filesystem/Memory/Playwright MCP servers.',
     agents: ['Claude Code', 'Codex CLI', 'Gemini CLI'],
-    mcpServers: ['GitHub', 'Filesystem', 'Memory', 'Playwright', 'Brave Search'],
+    mcpServers: ['Filesystem', 'Memory', 'Playwright', 'Brave Search'],
     tools: ['Node 22', 'TypeScript', 'gh', 'Docker', 'Starship', 'fzf', 'ripgrep'],
     source: 'architecton.ai',
   },
@@ -25,7 +25,7 @@ export const templates: Template[] = [
     description:
       'Python full-stack development with uv package manager, PostgreSQL MCP server, and full AI agent setup.',
     agents: ['Claude Code', 'Codex CLI', 'Gemini CLI'],
-    mcpServers: ['GitHub', 'Filesystem', 'Memory', 'PostgreSQL', 'Playwright'],
+    mcpServers: ['Filesystem', 'Memory', 'PostgreSQL', 'Playwright'],
     tools: ['Python 3.12', 'uv', 'gh', 'Docker', 'Starship', 'fzf', 'ripgrep'],
     source: 'architecton.ai',
   },
@@ -45,7 +45,7 @@ export const templates: Template[] = [
     description:
       'Infrastructure-as-code with AWS CLI, Terraform, Docker, Kubernetes MCP servers, Claude Code + Codex.',
     agents: ['Claude Code', 'Codex CLI'],
-    mcpServers: ['AWS', 'Docker', 'Kubernetes', 'GitHub', 'Filesystem'],
+    mcpServers: ['AWS', 'Docker', 'Kubernetes', 'Filesystem'],
     tools: ['Terraform', 'AWS CLI', 'Docker', 'kubectl', 'gh', 'Starship'],
     source: 'architecton.ai',
   },

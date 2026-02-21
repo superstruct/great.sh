@@ -60,11 +60,6 @@ transport = "stdio"
 role = "mcp-server"
 transport = "stdio"
 
-[mcp.github]
-source = "registry:github/github-mcp-server"
-transport = "http"
-credentials = ["GITHUB_TOKEN"]
-
 [mcp.filesystem]
 source = "registry:modelcontextprotocol/server-filesystem"
 transport = "stdio"

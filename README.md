@@ -53,7 +53,7 @@ Requirements → spec → review → scout → build → test/security/perf/UX �
 
 Pre-configured environment templates from [architecton.ai](https://architecton.ai):
 
-- **AI Full Stack (TypeScript)** — Claude Code + Codex + Gemini, GitHub/Playwright MCP servers
+- **AI Full Stack (TypeScript)** — Claude Code + Codex + Gemini, Playwright MCP server, gh CLI
 - **AI Full Stack (Python)** — Python with uv, PostgreSQL MCP server, full AI agent setup
 - **AI Data Science** — CUDA, Jupyter, Gemini for data analysis, database MCP servers
 - **AI DevOps** — Terraform, AWS CLI, Docker, Kubernetes MCP servers
