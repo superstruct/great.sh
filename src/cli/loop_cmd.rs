@@ -119,6 +119,10 @@ const COMMANDS: &[CommandFile] = &[
         name: "discover",
         content: include_str!("../../loop/commands/discover.md"),
     },
+    CommandFile {
+        name: "backlog",
+        content: include_str!("../../loop/commands/backlog.md"),
+    },
 ];
 
 /// Teams configuration JSON embedded at compile time.
