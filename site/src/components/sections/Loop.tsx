@@ -6,7 +6,7 @@ import { motion } from 'motion/react'
 
 const phases = [
   {
-    label: 'Phase 1 -- Sequential',
+    label: 'Phase 1 — Sequential',
     agents: [
       { name: 'Nightingale', role: 'Requirements', methodology: 'Transforms chaos into organized task files with statistical discipline' },
       { name: 'Lovelace', role: 'Spec', methodology: 'Produces self-contained specs so precise a builder needs nothing else' },
@@ -16,36 +16,36 @@ const phases = [
     flow: 'sequential' as const,
   },
   {
-    label: 'Phase 2 -- Parallel Team',
+    label: 'Phase 2 — Parallel Team',
     agents: [
       { name: 'Da Vinci', role: 'Build', methodology: 'Turns specs into working code, runs all quality gates' },
-      { name: 'Turing', role: 'Test', methodology: 'Adversarial tester -- proves the build is broken' },
+      { name: 'Turing', role: 'Test', methodology: 'Adversarial tester — proves the build is broken' },
       { name: 'Kerckhoffs', role: 'Security', methodology: 'Audits credentials, permissions, input validation, supply chain' },
       { name: 'Nielsen', role: 'UX', methodology: '10 Usability Heuristics applied to every user journey' },
     ],
     flow: 'parallel' as const,
-    note: 'Wirth (Performance Sentinel) runs in parallel -- measures artifact size, flags regressions',
+    note: 'Wirth (Performance Sentinel) runs in parallel — measures artifact size, flags regressions',
   },
   {
-    label: 'Phase 3 -- Gate + Finish',
+    label: 'Phase 3 — Gate + Finish',
     agents: [
-      { name: 'Dijkstra', role: 'Code Review', methodology: 'Structured programming principles -- reviews quality, complexity, structure' },
+      { name: 'Dijkstra', role: 'Code Review', methodology: 'Structured programming principles — reviews quality, complexity, structure' },
       { name: 'Rams', role: 'Visual Review', methodology: '10 Principles of Good Design applied to output aesthetics' },
-      { name: 'Hopper', role: 'Commit', methodology: 'Never commits a broken build -- all gates must pass' },
-      { name: 'Knuth', role: 'Docs', methodology: 'Every code example must work -- docs and release notes' },
+      { name: 'Hopper', role: 'Commit', methodology: 'Never commits a broken build — all gates must pass' },
+      { name: 'Knuth', role: 'Docs', methodology: 'Every code example must work — docs and release notes' },
       { name: 'Gutenberg', role: 'Doc Commit', methodology: 'Commits documentation independently of code' },
-      { name: 'Deming', role: 'Observe', methodology: 'PDCA cycle -- observer report, one config change if needed' },
+      { name: 'Deming', role: 'Observe', methodology: 'PDCA cycle — observer report, one config change if needed' },
     ],
     flow: 'sequential' as const,
   },
 ]
 
 const slashCommands = [
-  { cmd: '/backlog', desc: 'Capture requirements into .tasks/backlog/ -- run this first' },
+  { cmd: '/backlog', desc: 'Capture requirements into .tasks/backlog/ — run this first' },
   { cmd: '/loop', desc: 'Full 16-agent development cycle' },
   { cmd: '/bugfix', desc: 'Targeted fix: reproduce, patch, verify, commit' },
   { cmd: '/deploy', desc: 'Build and verify release artifacts' },
-  { cmd: '/discover', desc: 'UX discovery sweep -- Nielsen maps journeys, Nightingale files issues' },
+  { cmd: '/discover', desc: 'UX discovery sweep — Nielsen maps journeys, Nightingale files issues' },
 ]
 
 export function Loop() {
@@ -86,9 +86,15 @@ export function Loop() {
               <div className="text-text-tertiary text-xs font-mono uppercase tracking-wider mb-3">
                 {phase.label}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={
+                phase.agents.length > 5
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'
+                  : 'flex flex-wrap items-center gap-2'
+              }>
                 {phase.agents.map((agent, i) => (
-                  <div key={agent.name} className="flex items-center gap-2">
+                  <div key={agent.name} className={
+                    phase.agents.length > 5 ? '' : 'flex items-center gap-2'
+                  }>
                     <div className="bg-bg-secondary border border-border rounded-lg px-4 py-2.5 hover:border-accent/30 transition-colors">
                       <div className="font-display text-sm text-text-primary">
                         {agent.name}
@@ -100,9 +106,9 @@ export function Loop() {
                         {agent.methodology}
                       </div>
                     </div>
-                    {i < phase.agents.length - 1 && (
-                      <span className="text-text-tertiary text-sm font-mono">
-                        {phase.flow === 'parallel' ? '+' : '\u2192'}
+                    {phase.agents.length <= 5 && i < phase.agents.length - 1 && (
+                      <span className="hidden xl:inline text-text-tertiary text-sm font-mono">
+                        {phase.flow === 'parallel' ? '+' : '→'}
                       </span>
                     )}
                   </div>
