@@ -1,11 +1,12 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 # great.sh installer
 # Usage: curl -sSL https://great.sh/install.sh | sh
 
 REPO="superstruct/great.sh"
 INSTALL_DIR="${GREAT_INSTALL_DIR:-$HOME/.local/bin}"
+TMP=""
 
 main() {
     echo "Installing great.sh..."
@@ -46,20 +47,19 @@ main() {
     mkdir -p "$INSTALL_DIR"
 
     # Download binary
-    local tmp
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
 
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$latest_url" -o "$tmp/great"
+        curl -sSL "$latest_url" -o "$TMP/great"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$tmp/great" "$latest_url"
+        wget -qO "$TMP/great" "$latest_url"
     else
         echo "Error: curl or wget required"
         exit 1
     fi
 
-    install -m 755 "$tmp/great" "$INSTALL_DIR/great"
+    install -m 755 "$TMP/great" "$INSTALL_DIR/great"
 
     echo
     echo "  Installed to: $INSTALL_DIR/great"
