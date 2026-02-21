@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_commands_count() {
-        assert_eq!(COMMANDS.len(), 4);
+        assert_eq!(COMMANDS.len(), 5);
     }
 
     #[test]
