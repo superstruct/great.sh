@@ -5,11 +5,17 @@
 #   docker compose up --build fedora      # Test on Fedora 39
 #   docker compose run ubuntu bash        # Interactive shell
 #   docker compose run macos-cross        # Cross-compile macOS binaries
+#   docker compose run windows-cross      # Cross-compile Windows binary
 #   docker compose up macos               # Boot macOS VM (requires KVM)
+#   docker compose up windows             # Boot Windows VM (requires KVM)
+#   docker compose up ubuntu-vm           # Boot Ubuntu VM (requires KVM)
 #
-# Each container builds the great CLI from source and runs the test suite.
+# Each headless container builds the great CLI from source and runs the test suite.
 
 services:
+
+  # ── Layer 1: Headless — cross-compilation & test suite ─────────────
+
   ubuntu:
     build:
       context: .
@@ -46,7 +52,21 @@ services:
     working_dir: /build
     command: ["bash", "/workspace/docker/cross-test-macos.sh"]
 
-  # macOS VM for real execution testing (requires KVM)
+  # Windows cross-compilation via MinGW (x86_64)
+  windows-cross:
+    build:
+      context: .
+      dockerfile: docker/cross-windows.Dockerfile
+    volumes:
+      - .:/workspace:ro
+      - cargo-cache-windows:/root/.cargo/registry
+      - ./test-files:/workspace/test-files
+    working_dir: /build
+    command: ["bash", "/workspace/docker/cross-test-windows.sh"]
+
+  # ── Layer 2: VNC/VM — graphical host integration testing ───────────
+
+  # macOS VM (VNC :5900, web :8007)
   macos:
     image: dockurr/macos
     environment:
@@ -68,7 +88,51 @@ services:
     restart: unless-stopped
     stop_grace_period: 2m
 
+  # Windows 11 VM (web :8006, RDP :3389)
+  windows:
+    image: dockurr/windows
+    environment:
+      VERSION: "11"
+      RAM_SIZE: "4G"
+      CPU_CORES: "4"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8006:8006"
+      - "3389:3389/tcp"
+      - "3389:3389/udp"
+    volumes:
+      - ./windows-storage:/storage
+      - ./test-files:/shared
+    restart: unless-stopped
+    stop_grace_period: 2m
+
+  # Ubuntu Desktop VM (web :8009)
+  ubuntu-vm:
+    image: qemux/qemu
+    environment:
+      BOOT: "ubuntu"
+      DISK_SIZE: "64G"
+      RAM_SIZE: "4G"
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8009:8006"
+    volumes:
+      - ./ubuntu-vm-storage:/storage
+      - ./test-files:/shared
+    restart: unless-stopped
+    stop_grace_period: 2m
+
 volumes:
   cargo-cache-ubuntu:
   cargo-cache-fedora:
   cargo-cache-macos:
+  cargo-cache-windows:
