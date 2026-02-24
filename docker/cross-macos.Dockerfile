@@ -4,7 +4,18 @@
 #   docker compose build macos-cross
 #   docker compose run macos-cross
 #   docker compose run macos-cross cargo build --release --target x86_64-apple-darwin
-FROM crazymax/osxcross:latest-ubuntu
+#
+# The osxcross image is FROM scratch upstream (no shell, no OS userland).
+# We use it as a named stage and COPY the toolchain into a real Ubuntu base.
+
+# Stage 1: pinned osxcross toolchain source (FROM scratch -- not runnable)
+FROM crazymax/osxcross:26.1-r0-ubuntu AS osxcross
+
+# Stage 2: real Ubuntu base with shell and package manager
+FROM ubuntu:24.04
+
+# Copy the osxcross toolchain from the source stage
+COPY --from=osxcross /osxcross /osxcross
 
 # Install system dependencies needed for Rust compilation
 RUN apt-get update && apt-get install -y \
@@ -17,6 +28,10 @@ RUN apt-get update && apt-get install -y \
     file \
     && rm -rf /var/lib/apt/lists/*
 
+# Make osxcross binaries available on PATH
+ENV PATH="/osxcross/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/osxcross/lib:${LD_LIBRARY_PATH}"
+
 # Install Rust toolchain with both macOS targets
 ENV RUSTUP_HOME=/opt/rust
 ENV CARGO_HOME=/opt/rust
@@ -24,7 +39,7 @@ ENV PATH="/opt/rust/bin:${PATH}"
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
     -y \
-    --default-toolchain stable \
+    --default-toolchain 1.85.0 \
     --profile minimal \
     --no-modify-path
 
