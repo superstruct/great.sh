@@ -140,6 +140,17 @@ pub fn run(args: Args) -> Result<()> {
     }
 }
 
+/// Returns the correct `statusLine` JSON value for Claude Code settings.
+///
+/// Claude Code requires `"type": "command"` as a discriminator field.
+/// Without it, the entire settings.json is rejected by the validator.
+fn statusline_value() -> serde_json::Value {
+    serde_json::json!({
+        "type": "command",
+        "command": "great statusline"
+    })
+}
+
 /// Install the great.sh Loop agent team to `~/.claude/`.
 fn run_install(project: bool) -> Result<()> {
     let home = dirs::home_dir().context("could not determine home directory — is $HOME set?")?;
@@ -214,9 +225,7 @@ fn run_install(project: bool) -> Result<()> {
                     "LS"
                 ]
             },
-            "statusLine": {
-                "command": "great statusline"
-            }
+            "statusLine": statusline_value()
         });
         let formatted = serde_json::to_string_pretty(&default_settings)
             .context("failed to serialize default settings")?;
@@ -225,18 +234,30 @@ fn run_install(project: bool) -> Result<()> {
         output::success("Settings with Agent Teams enabled -> ~/.claude/settings.json");
     }
 
-    // Inject statusLine key into existing settings.json if not already present
+    // Inject or repair statusLine in existing settings.json
     if settings_path.exists() {
         let contents = std::fs::read_to_string(&settings_path)
             .context("failed to read ~/.claude/settings.json for statusLine injection")?;
         match serde_json::from_str::<serde_json::Value>(&contents) {
             Ok(mut val) => {
                 if let Some(obj) = val.as_object_mut() {
-                    if !obj.contains_key("statusLine") {
-                        obj.insert(
-                            "statusLine".to_string(),
-                            serde_json::json!({"command": "great statusline"}),
-                        );
+                    let needs_write = if !obj.contains_key("statusLine") {
+                        // statusLine key missing entirely -- inject it
+                        obj.insert("statusLine".to_string(), statusline_value());
+                        true
+                    } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
+                        // statusLine exists but may be missing "type" field
+                        if !sl.contains_key("type") {
+                            obj.insert("statusLine".to_string(), statusline_value());
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if needs_write {
                         let formatted = serde_json::to_string_pretty(&val)
                             .context("failed to serialize settings.json")?;
                         std::fs::write(&settings_path, formatted)
@@ -534,5 +555,107 @@ mod tests {
                 name
             );
         }
+    }
+
+    #[test]
+    fn test_statusline_value_has_type_command() {
+        let val = super::statusline_value();
+        let obj = val.as_object().expect("statusline_value must be an object");
+        assert_eq!(
+            obj.get("type").and_then(|v| v.as_str()),
+            Some("command"),
+            "statusLine must contain \"type\": \"command\""
+        );
+        assert_eq!(
+            obj.get("command").and_then(|v| v.as_str()),
+            Some("great statusline"),
+            "statusLine must contain \"command\": \"great statusline\""
+        );
+    }
+
+    #[test]
+    fn test_default_settings_statusline_has_type() {
+        let default_settings = serde_json::json!({
+            "env": {
+                "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+            },
+            "permissions": {
+                "allow": [
+                    "Bash(cargo *)",
+                    "Bash(pnpm *)",
+                    "Read",
+                    "Write",
+                    "Edit",
+                    "Glob",
+                    "Grep",
+                    "LS"
+                ]
+            },
+            "statusLine": super::statusline_value()
+        });
+        let sl = &default_settings["statusLine"];
+        assert_eq!(sl["type"].as_str(), Some("command"));
+        assert_eq!(sl["command"].as_str(), Some("great statusline"));
+    }
+
+    /// Simulate the repair branch: given a settings object with a broken
+    /// statusLine (missing "type"), the repair logic should replace it with
+    /// the correct shape from statusline_value().
+    #[test]
+    fn test_repair_fixes_broken_statusline() {
+        let mut settings = serde_json::json!({
+            "env": { "SOME_KEY": "value" },
+            "statusLine": { "command": "great statusline" }
+        });
+
+        // Run the same decision logic as run_install's repair branch
+        let obj = settings.as_object_mut().unwrap();
+        let needs_write = if !obj.contains_key("statusLine") {
+            obj.insert("statusLine".to_string(), super::statusline_value());
+            true
+        } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
+            if !sl.contains_key("type") {
+                obj.insert("statusLine".to_string(), super::statusline_value());
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        assert!(needs_write, "broken statusLine should trigger a write");
+        let sl = obj.get("statusLine").unwrap();
+        assert_eq!(sl["type"].as_str(), Some("command"), "repair must add type field");
+        assert_eq!(sl["command"].as_str(), Some("great statusline"), "repair must preserve command");
+        // Other keys must survive the round-trip
+        assert_eq!(settings["env"]["SOME_KEY"].as_str(), Some("value"));
+    }
+
+    /// Simulate the repair branch: given a settings object with a correct
+    /// statusLine (has "type": "command"), the repair logic should NOT
+    /// trigger a write.
+    #[test]
+    fn test_correct_statusline_skips_repair() {
+        let mut settings = serde_json::json!({
+            "statusLine": { "type": "command", "command": "great statusline" }
+        });
+
+        let obj = settings.as_object_mut().unwrap();
+        let needs_write = if !obj.contains_key("statusLine") {
+            obj.insert("statusLine".to_string(), super::statusline_value());
+            true
+        } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
+            if !sl.contains_key("type") {
+                obj.insert("statusLine".to_string(), super::statusline_value());
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        assert!(!needs_write, "correct statusLine should NOT trigger a write");
     }
 }
