@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Args as ClapArgs, Subcommand};
 
 use crate::cli::output;
@@ -18,6 +18,10 @@ pub enum LoopCommand {
         /// Also set up .tasks/ working state in current directory
         #[arg(long)]
         project: bool,
+
+        /// Overwrite existing files without prompting
+        #[arg(long)]
+        force: bool,
     },
     /// Show loop installation status
     Status,
@@ -101,7 +105,7 @@ const AGENTS: &[AgentFile] = &[
     },
 ];
 
-/// All 4 slash-command files shipped with the great.sh Loop.
+/// All 5 slash-command files shipped with the great.sh Loop.
 const COMMANDS: &[CommandFile] = &[
     CommandFile {
         name: "loop",
@@ -134,7 +138,7 @@ const OBSERVER_TEMPLATE: &str = include_str!("../../loop/observer-template.md");
 /// Run the `great loop` subcommand.
 pub fn run(args: Args) -> Result<()> {
     match args.command {
-        LoopCommand::Install { project } => run_install(project),
+        LoopCommand::Install { project, force } => run_install(project, force),
         LoopCommand::Status => run_status(),
         LoopCommand::Uninstall => run_uninstall(),
     }
@@ -151,8 +155,80 @@ fn statusline_value() -> serde_json::Value {
     })
 }
 
+/// Returns the subset of the 21 managed file paths that already exist on disk.
+///
+/// Each returned path is the full absolute path. The caller uses this list to
+/// decide whether to prompt the user for confirmation before overwriting.
+fn collect_existing_paths(claude_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let agents_dir = claude_dir.join("agents");
+    let commands_dir = claude_dir.join("commands");
+    let teams_dir = claude_dir.join("teams").join("loop");
+
+    let mut existing = Vec::new();
+
+    for agent in AGENTS {
+        let path = agents_dir.join(format!("{}.md", agent.name));
+        if path.exists() {
+            existing.push(path);
+        }
+    }
+
+    for cmd in COMMANDS {
+        let path = commands_dir.join(format!("{}.md", cmd.name));
+        if path.exists() {
+            existing.push(path);
+        }
+    }
+
+    let config_path = teams_dir.join("config.json");
+    if config_path.exists() {
+        existing.push(config_path);
+    }
+
+    existing
+}
+
+/// Prompts the user to confirm overwriting existing files, or aborts in non-TTY contexts.
+///
+/// Returns `Ok(true)` if the user confirms, `Ok(false)` if they decline or stdin is not a TTY.
+fn confirm_overwrite(existing: &[std::path::PathBuf]) -> Result<bool> {
+    use std::io::IsTerminal;
+
+    eprintln!();
+    output::warning("The following files already exist and will be overwritten:");
+    for path in existing {
+        let display = if let Some(home) = dirs::home_dir() {
+            if let Ok(relative) = path.strip_prefix(&home) {
+                format!("~/{}", relative.display())
+            } else {
+                path.display().to_string()
+            }
+        } else {
+            path.display().to_string()
+        };
+        eprintln!("  {}", display);
+    }
+
+    if !std::io::stdin().is_terminal() {
+        eprintln!();
+        output::error("stdin is not a terminal -- cannot prompt for confirmation.");
+        output::info("Re-run with --force to overwrite: great loop install --force");
+        return Ok(false);
+    }
+
+    eprint!("Overwrite? [y/N] ");
+
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .context("failed to read from stdin")?;
+
+    let answer = input.trim().to_lowercase();
+    Ok(answer == "y" || answer == "yes")
+}
+
 /// Install the great.sh Loop agent team to `~/.claude/`.
-fn run_install(project: bool) -> Result<()> {
+fn run_install(project: bool, force: bool) -> Result<()> {
     let home = dirs::home_dir().context("could not determine home directory — is $HOME set?")?;
     let claude_dir = home.join(".claude");
 
@@ -170,6 +246,19 @@ fn run_install(project: bool) -> Result<()> {
     std::fs::create_dir_all(&teams_dir)
         .context("failed to create ~/.claude/teams/loop/ directory")?;
 
+    // Check for existing files before writing
+    let existing = collect_existing_paths(&claude_dir);
+    if !existing.is_empty() && !force {
+        let confirmed = confirm_overwrite(&existing)?;
+        if !confirmed {
+            bail!("aborted: no files were modified");
+        }
+    }
+
+    if force && !existing.is_empty() {
+        output::info("(--force: overwriting existing files)");
+    }
+
     // Write agent files
     for agent in AGENTS {
         let path = agents_dir.join(format!("{}.md", agent.name));
@@ -181,7 +270,7 @@ fn run_install(project: bool) -> Result<()> {
         AGENTS.len()
     ));
 
-    // Write 4 command files
+    // Write command files
     for cmd in COMMANDS {
         let path = commands_dir.join(format!("{}.md", cmd.name));
         std::fs::write(&path, cmd.content)
@@ -657,5 +746,116 @@ mod tests {
         };
 
         assert!(!needs_write, "correct statusLine should NOT trigger a write");
+    }
+
+    #[test]
+    fn test_collect_existing_paths_empty_dir() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        let existing = super::collect_existing_paths(&claude_dir);
+        assert!(
+            existing.is_empty(),
+            "fresh directory should have no existing managed files"
+        );
+    }
+
+    #[test]
+    fn test_collect_existing_paths_partial_install() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        let agents_dir = claude_dir.join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+
+        std::fs::write(agents_dir.join("davinci.md"), "test").unwrap();
+
+        let existing = super::collect_existing_paths(&claude_dir);
+        assert_eq!(existing.len(), 1);
+        assert!(existing[0].ends_with("davinci.md"));
+    }
+
+    #[test]
+    fn test_collect_existing_paths_full_install() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        let agents_dir = claude_dir.join("agents");
+        let commands_dir = claude_dir.join("commands");
+        let teams_dir = claude_dir.join("teams").join("loop");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        std::fs::create_dir_all(&commands_dir).unwrap();
+        std::fs::create_dir_all(&teams_dir).unwrap();
+
+        for agent in super::AGENTS {
+            std::fs::write(agents_dir.join(format!("{}.md", agent.name)), "test").unwrap();
+        }
+        for cmd in super::COMMANDS {
+            std::fs::write(commands_dir.join(format!("{}.md", cmd.name)), "test").unwrap();
+        }
+        std::fs::write(teams_dir.join("config.json"), "{}").unwrap();
+
+        let existing = super::collect_existing_paths(&claude_dir);
+        assert_eq!(
+            existing.len(),
+            21,
+            "full install should detect all 21 managed files, got {}",
+            existing.len()
+        );
+    }
+
+    #[test]
+    fn test_collect_existing_paths_only_commands() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        let commands_dir = claude_dir.join("commands");
+        std::fs::create_dir_all(&commands_dir).unwrap();
+
+        std::fs::write(commands_dir.join("loop.md"), "test").unwrap();
+        std::fs::write(commands_dir.join("bugfix.md"), "test").unwrap();
+
+        let existing = super::collect_existing_paths(&claude_dir);
+        assert_eq!(existing.len(), 2);
+    }
+
+    #[test]
+    fn test_collect_existing_paths_ignores_unknown_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        let agents_dir = claude_dir.join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+
+        std::fs::write(agents_dir.join("custom-agent.md"), "user content").unwrap();
+
+        let existing = super::collect_existing_paths(&claude_dir);
+        assert!(
+            existing.is_empty(),
+            "non-managed files should not be detected"
+        );
+    }
+
+    #[test]
+    fn test_install_variant_has_force_flag() {
+        use clap::Parser;
+
+        #[derive(clap::Parser)]
+        struct TestCli {
+            #[command(subcommand)]
+            cmd: super::LoopCommand,
+        }
+
+        let cli = TestCli::parse_from(["test", "install", "--force"]);
+        match cli.cmd {
+            super::LoopCommand::Install { force, project } => {
+                assert!(force, "--force should be true");
+                assert!(!project, "--project should default to false");
+            }
+            _ => panic!("expected Install variant"),
+        }
+
+        let cli2 = TestCli::parse_from(["test", "install"]);
+        match cli2.cmd {
+            super::LoopCommand::Install { force, .. } => {
+                assert!(!force, "--force should default to false");
+            }
+            _ => panic!("expected Install variant"),
+        }
     }
 }

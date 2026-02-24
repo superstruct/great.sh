@@ -1074,6 +1074,85 @@ fn statusline_no_color_flag_and_env_combined() {
     );
 }
 
+// -----------------------------------------------------------------------
+// Loop install -- overwrite safety
+// -----------------------------------------------------------------------
+
+#[test]
+fn loop_install_force_flag_accepted() {
+    great()
+        .args(["loop", "install", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--force"));
+}
+
+#[test]
+fn loop_install_force_fresh_succeeds() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    assert!(dir.path().join(".claude/agents/nightingale.md").exists());
+    assert!(dir.path().join(".claude/commands/loop.md").exists());
+    assert!(dir.path().join(".claude/teams/loop/config.json").exists());
+}
+
+#[test]
+fn loop_install_non_tty_existing_files_aborts() {
+    let dir = TempDir::new().unwrap();
+
+    // First install (fresh, should succeed)
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    // Second install without --force, piped stdin (not a TTY)
+    great()
+        .args(["loop", "install"])
+        .env("HOME", dir.path())
+        .write_stdin("y\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--force"));
+}
+
+#[test]
+fn loop_install_force_overwrites_existing() {
+    let dir = TempDir::new().unwrap();
+
+    // First install
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    // Modify a file to prove it gets overwritten
+    let agent_path = dir.path().join(".claude/agents/nightingale.md");
+    std::fs::write(&agent_path, "user customization").unwrap();
+
+    // Second install with --force
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("--force: overwriting existing files"));
+
+    // Verify file was overwritten
+    let content = std::fs::read_to_string(&agent_path).unwrap();
+    assert!(
+        !content.contains("user customization"),
+        "file should have been overwritten"
+    );
+}
+
 #[test]
 fn statusline_with_state_file_renders_agents() {
     let dir = TempDir::new().unwrap();
