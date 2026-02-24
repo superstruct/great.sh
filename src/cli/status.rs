@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Args as ClapArgs;
 use serde::Serialize;
 
-use crate::cli::output;
+use crate::cli::{output, util};
 use crate::config;
 use crate::platform::{self, command_exists};
 
@@ -179,7 +179,7 @@ pub fn run(args: Args) -> Result<()> {
                 }
                 let installed = command_exists(name);
                 let actual_version = if installed {
-                    get_tool_version(name)
+                    util::get_command_version(name)
                 } else {
                     has_critical_issues = true;
                     None
@@ -197,7 +197,7 @@ pub fn run(args: Args) -> Result<()> {
                 for (name, version) in cli_tools {
                     let installed = command_exists(name);
                     let actual_version = if installed {
-                        get_tool_version(name)
+                        util::get_command_version(name)
                     } else {
                         has_critical_issues = true;
                         None
@@ -317,7 +317,7 @@ fn run_json(
                 }
                 let installed = command_exists(name);
                 let actual_version = if installed {
-                    get_tool_version(name)
+                    util::get_command_version(name)
                 } else {
                     issues.push(format!("tool '{}' is not installed", name));
                     None
@@ -333,7 +333,7 @@ fn run_json(
                 for (name, version) in cli_tools {
                     let installed = command_exists(name);
                     let actual_version = if installed {
-                        get_tool_version(name)
+                        util::get_command_version(name)
                     } else {
                         issues.push(format!("tool '{}' is not installed", name));
                         None
@@ -428,31 +428,6 @@ fn run_json(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Try to get a tool's version by running `<tool> --version`.
-///
-/// Returns the first non-empty line of stdout, trimmed. Returns `None` if the
-/// command fails or produces no output.
-fn get_tool_version(tool: &str) -> Option<String> {
-    let output = std::process::Command::new(tool)
-        .arg("--version")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .ok()?;
-
-    if output.status.success() {
-        let version = String::from_utf8_lossy(&output.stdout);
-        let first_line = version.lines().next().unwrap_or("").trim();
-        if first_line.is_empty() {
-            None
-        } else {
-            Some(first_line.to_string())
-        }
-    } else {
-        None
-    }
-}
 
 /// Print a single tool's status line with color coding.
 fn print_tool_status(

@@ -12,6 +12,7 @@ pub mod sync;
 pub mod template;
 pub mod tuning;
 pub mod update;
+pub mod util;
 pub mod vault;
 
 use clap::{Parser, Subcommand};

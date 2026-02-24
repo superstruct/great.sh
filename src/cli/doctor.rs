@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 
-use crate::cli::{bootstrap, output, tuning};
+use crate::cli::{bootstrap, output, tuning, util};
 use crate::config;
 use crate::platform::package_manager;
 use crate::platform::{self, command_exists, Platform, PlatformInfo};
@@ -87,13 +87,18 @@ pub fn run(args: Args) -> Result<()> {
     // 5. AI agents check
     check_ai_agents(&mut result);
 
-    // 6. Config check
-    check_config(&mut result);
+    // 6. Config check — load config here so it can be shared with MCP check
+    let loaded_config = check_config(&mut result);
 
-    // 7. Shell check
+    // 7. MCP server checks (only if config was loaded successfully)
+    if let Some(ref cfg) = loaded_config {
+        check_mcp_servers(&mut result, cfg);
+    }
+
+    // 8. Shell check
     check_shell(&mut result);
 
-    // 8. System tuning check (Linux/WSL only)
+    // 9. System tuning check (Linux/WSL only)
     check_system_tuning(&mut result, &info);
 
     // Attempt auto-fixes if --fix was passed
@@ -209,6 +214,7 @@ pub fn run(args: Args) -> Result<()> {
             fixed,
             result.fixable.len()
         ));
+        output::info("Re-run `great doctor` to verify fixes.");
     }
 
     // Summary
@@ -222,12 +228,22 @@ pub fn run(args: Args) -> Result<()> {
     if result.checks_failed > 0 && !args.fix {
         println!();
         output::warning("Run `great doctor --fix` to attempt automatic fixes.");
+    } else if result.checks_failed > 0 {
+        println!();
+        output::warning("Some issues remain — re-run `great doctor` to verify.");
     } else if result.checks_warned > 0 {
         println!();
         output::success("No critical issues found.");
-    } else if result.checks_failed == 0 {
+    } else {
         println!();
         output::success("Environment is healthy!");
+    }
+
+    // NOTE: Intentional use of process::exit — the doctor command must print
+    // its full report before exiting non-zero. Using bail!() would abort
+    // mid-report, which is wrong for a diagnostic command.
+    if result.checks_failed > 0 {
+        std::process::exit(1);
     }
 
     Ok(())
@@ -260,7 +276,7 @@ fn check_platform(result: &mut DiagnosticResult) {
     // Check architecture
     match info.platform.arch() {
         platform::Architecture::X86_64 | platform::Architecture::Aarch64 => {
-            pass(result, &format!("Architecture: {:?}", info.platform.arch()));
+            pass(result, &format!("Architecture: {}", info.platform.arch()));
         }
         _ => {
             warn(
@@ -359,7 +375,7 @@ fn check_essential_tools(result: &mut DiagnosticResult) {
 
     for (cmd, name, brew_name, install_hint) in essential {
         if command_exists(cmd) {
-            let version = get_command_version(cmd);
+            let version = util::get_command_version(cmd);
             let ver_str = version.as_deref().unwrap_or("version unknown");
             pass(result, &format!("{}: {} ({})", name, cmd, ver_str));
         } else {
@@ -453,15 +469,31 @@ fn check_ai_agents(result: &mut DiagnosticResult) {
     println!();
 }
 
-fn check_config(result: &mut DiagnosticResult) {
+fn check_config(result: &mut DiagnosticResult) -> Option<config::GreatConfig> {
     output::header("Configuration");
 
-    match config::discover_config() {
+    let loaded_config = match config::discover_config() {
         Ok(path) => {
             pass(result, &format!("great.toml: found at {}", path.display()));
-            match config::load(Some(path.to_str().unwrap_or_default())) {
+            let path_str = match path.to_str() {
+                Some(s) => s,
+                None => {
+                    fail(
+                        result,
+                        &format!(
+                            "great.toml: path contains non-UTF-8 characters: {}",
+                            path.display()
+                        ),
+                    );
+                    println!();
+                    return None;
+                }
+            };
+            match config::load(Some(path_str)) {
                 Ok(cfg) => {
                     pass(result, "great.toml: valid syntax");
+                    // Note: config::load() already validates and bails on errors,
+                    // so the Error arm below is defensive only (warnings can appear).
                     let messages = cfg.validate();
                     for msg in &messages {
                         match msg {
@@ -485,9 +517,11 @@ fn check_config(result: &mut DiagnosticResult) {
                             );
                         }
                     }
+                    Some(cfg)
                 }
                 Err(e) => {
                     fail(result, &format!("great.toml: parse error — {}", e));
+                    None
                 }
             }
         }
@@ -496,8 +530,9 @@ fn check_config(result: &mut DiagnosticResult) {
                 result,
                 "great.toml: not found — run `great init` to create one",
             );
+            None
         }
-    }
+    };
 
     // Check Claude config directories
     let home = dirs::home_dir();
@@ -511,6 +546,43 @@ fn check_config(result: &mut DiagnosticResult) {
                 description: "Create ~/.claude/ directory".to_string(),
                 action: FixAction::CreateClaudeDir,
             });
+        }
+    }
+
+    println!();
+    loaded_config
+}
+
+/// Check that MCP server commands declared in great.toml are available on PATH.
+fn check_mcp_servers(result: &mut DiagnosticResult, cfg: &config::GreatConfig) {
+    let mcps = match &cfg.mcp {
+        Some(m) if !m.is_empty() => m,
+        _ => return,
+    };
+
+    output::header("MCP Servers");
+
+    for (name, mcp) in mcps {
+        // Skip disabled servers
+        if mcp.enabled == Some(false) {
+            pass(result, &format!("{}: disabled (skipped)", name));
+            continue;
+        }
+
+        if command_exists(&mcp.command) {
+            let transport = mcp.transport.as_deref().unwrap_or("stdio");
+            pass(
+                result,
+                &format!("{}: {} found [{}]", name, mcp.command, transport),
+            );
+        } else {
+            fail(
+                result,
+                &format!(
+                    "{}: command '{}' not found on PATH",
+                    name, mcp.command
+                ),
+            );
         }
     }
 
@@ -712,27 +784,3 @@ fn check_system_tuning(result: &mut DiagnosticResult, info: &PlatformInfo) {
     println!();
 }
 
-/// Try to get a command's version string.
-///
-/// Runs `<cmd> --version` and returns the first line of stdout, or `None`
-/// if the command fails or produces no output.
-fn get_command_version(cmd: &str) -> Option<String> {
-    let output = std::process::Command::new(cmd)
-        .arg("--version")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .ok()?;
-
-    if output.status.success() {
-        let version = String::from_utf8_lossy(&output.stdout);
-        let first_line = version.lines().next().unwrap_or("").trim();
-        if first_line.is_empty() {
-            None
-        } else {
-            Some(first_line.to_string())
-        }
-    } else {
-        None
-    }
-}

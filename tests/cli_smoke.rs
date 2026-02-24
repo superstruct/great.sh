@@ -98,7 +98,6 @@ fn doctor_runs_diagnostics() {
         .current_dir(dir.path())
         .arg("doctor")
         .assert()
-        .success()
         .stderr(predicate::str::contains("Platform"))
         .stderr(predicate::str::contains("Essential Tools"))
         .stderr(predicate::str::contains("Summary"));
@@ -302,7 +301,6 @@ fn doctor_checks_system_prerequisites() {
         .current_dir(dir.path())
         .arg("doctor")
         .assert()
-        .success()
         .stderr(predicate::str::contains("System Prerequisites"));
 }
 
@@ -313,8 +311,99 @@ fn doctor_checks_docker() {
         .current_dir(dir.path())
         .arg("doctor")
         .assert()
-        .success()
         .stderr(predicate::str::contains("Docker"));
+}
+
+#[test]
+fn doctor_with_valid_config() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test-project"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .stderr(predicate::str::contains("great.toml: found at"))
+        .stderr(predicate::str::contains("great.toml: valid syntax"));
+}
+
+#[test]
+fn doctor_with_mcp_config_checks_servers() {
+    let dir = TempDir::new().unwrap();
+    // Write a great.toml with an MCP server whose command exists (ls is universal)
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.test-server]
+command = "ls"
+args = ["--help"]
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .stderr(predicate::str::contains("MCP Servers"))
+        .stderr(predicate::str::contains("test-server"));
+}
+
+#[test]
+fn doctor_mcp_missing_command_fails() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.broken]
+command = "nonexistent_command_xyz_99999"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .stderr(predicate::str::contains("not found on PATH"));
+}
+
+#[test]
+fn doctor_exits_nonzero_on_failure() {
+    let dir = TempDir::new().unwrap();
+    // Write a config with an MCP server that has a nonexistent command.
+    // This guarantees at least one check_failed.
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.broken]
+command = "nonexistent_command_xyz_99999"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("doctor")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Summary"));
 }
 
 // -----------------------------------------------------------------------
