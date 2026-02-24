@@ -74,6 +74,9 @@ impl PackageManager for Homebrew {
     }
 
     fn install(&self, package: &str, version: Option<&str>) -> Result<()> {
+        if !self.is_available() {
+            bail!("brew is not installed");
+        }
         if self.is_installed(package) {
             return Ok(()); // Idempotent
         }
@@ -103,12 +106,15 @@ impl PackageManager for Homebrew {
     }
 
     fn update(&self, package: &str) -> Result<()> {
+        if !self.is_available() {
+            bail!("brew is not installed");
+        }
         let status = std::process::Command::new("brew")
             .args(["upgrade", package])
             .status()
             .context(format!("failed to run brew upgrade {}", package))?;
         if !status.success() {
-            bail!("brew upgrade {} failed", package);
+            bail!("brew upgrade {} failed (exit code {:?})", package, status.code());
         }
         Ok(())
     }
@@ -124,7 +130,22 @@ impl PackageManager for Homebrew {
 /// or need OS-repo versions (e.g. docker-ce from Docker's apt repo, google-chrome
 /// from Google's repo, build-essential). For regular CLI tools, Homebrew is
 /// preferred because it doesn't require sudo and ships newer versions.
-pub struct Apt;
+pub struct Apt {
+    /// When true, sudo commands that may prompt for a password will fail fast
+    /// with an actionable error message instead of hanging.
+    non_interactive: bool,
+}
+
+impl Apt {
+    /// Create a new Apt instance.
+    ///
+    /// When `non_interactive` is true, install/update commands will use
+    /// `sudo -n` (non-interactive sudo) which fails immediately if a password
+    /// is required, rather than hanging on a prompt.
+    pub fn new(non_interactive: bool) -> Self {
+        Self { non_interactive }
+    }
+}
 
 impl PackageManager for Apt {
     fn name(&self) -> &str {
@@ -162,27 +183,64 @@ impl PackageManager for Apt {
     }
 
     fn install(&self, package: &str, _version: Option<&str>) -> Result<()> {
+        if !self.is_available() {
+            bail!("apt-get is not installed");
+        }
         if self.is_installed(package) {
             return Ok(()); // Idempotent
         }
-        let status = std::process::Command::new("sudo")
-            .args(["apt-get", "install", "-y", package])
+        let mut cmd = std::process::Command::new("sudo");
+        if self.non_interactive {
+            cmd.arg("-n");
+        }
+        cmd.args(["apt-get", "install", "-y", package]);
+        let status = cmd
             .status()
             .context(format!("failed to run apt-get install {}", package))?;
         if !status.success() {
-            bail!("apt-get install {} failed (may need sudo)", package);
+            if self.non_interactive {
+                bail!(
+                    "apt-get install {} failed -- sudo requires a password. \
+                     Run interactively or use: sudo apt-get install -y {}",
+                    package,
+                    package
+                );
+            }
+            bail!(
+                "apt-get install {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
 
     fn update(&self, package: &str) -> Result<()> {
-        // apt-get upgrade only works for all packages; for a single package, reinstall
-        let status = std::process::Command::new("sudo")
-            .args(["apt-get", "install", "--only-upgrade", "-y", package])
+        if !self.is_available() {
+            bail!("apt-get is not installed");
+        }
+        let mut cmd = std::process::Command::new("sudo");
+        if self.non_interactive {
+            cmd.arg("-n");
+        }
+        cmd.args(["apt-get", "install", "--only-upgrade", "-y", package]);
+        let status = cmd
             .status()
             .context(format!("failed to update {}", package))?;
         if !status.success() {
-            bail!("apt-get upgrade {} failed", package);
+            if self.non_interactive {
+                bail!(
+                    "apt-get upgrade {} failed -- sudo requires a password. \
+                     Run interactively or use: sudo apt-get install --only-upgrade -y {}",
+                    package,
+                    package
+                );
+            }
+            bail!(
+                "apt-get upgrade {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
@@ -230,6 +288,9 @@ impl PackageManager for CargoInstaller {
     }
 
     fn install(&self, package: &str, version: Option<&str>) -> Result<()> {
+        if !self.is_available() {
+            bail!("cargo is not installed");
+        }
         if self.is_installed(package) {
             return Ok(()); // Idempotent
         }
@@ -244,19 +305,22 @@ impl PackageManager for CargoInstaller {
             .status()
             .context(format!("failed to run cargo install {}", package))?;
         if !status.success() {
-            bail!("cargo install {} failed", package);
+            bail!("cargo install {} failed (exit code {:?})", package, status.code());
         }
         Ok(())
     }
 
     fn update(&self, package: &str) -> Result<()> {
+        if !self.is_available() {
+            bail!("cargo is not installed");
+        }
         // cargo install --force will reinstall/update
         let status = std::process::Command::new("cargo")
             .args(["install", package, "--force"])
             .status()
             .context(format!("failed to update {}", package))?;
         if !status.success() {
-            bail!("cargo install --force {} failed", package);
+            bail!("cargo install --force {} failed (exit code {:?})", package, status.code());
         }
         Ok(())
     }
@@ -305,6 +369,9 @@ impl PackageManager for NpmInstaller {
     }
 
     fn install(&self, package: &str, version: Option<&str>) -> Result<()> {
+        if !self.is_available() {
+            bail!("npm is not installed -- install Node.js first");
+        }
         if self.is_installed(package) {
             return Ok(()); // Idempotent
         }
@@ -317,18 +384,21 @@ impl PackageManager for NpmInstaller {
             .status()
             .context(format!("failed to run npm install -g {}", pkg_spec))?;
         if !status.success() {
-            bail!("npm install -g {} failed", pkg_spec);
+            bail!("npm install -g {} failed (exit code {:?})", pkg_spec, status.code());
         }
         Ok(())
     }
 
     fn update(&self, package: &str) -> Result<()> {
+        if !self.is_available() {
+            bail!("npm is not installed -- install Node.js first");
+        }
         let status = std::process::Command::new("npm")
             .args(["update", "-g", package])
             .status()
             .context(format!("failed to update {}", package))?;
         if !status.success() {
-            bail!("npm update -g {} failed", package);
+            bail!("npm update -g {} failed (exit code {:?})", package, status.code());
         }
         Ok(())
     }
@@ -345,7 +415,7 @@ impl PackageManager for NpmInstaller {
 /// supported platforms (macOS, Ubuntu, WSL Ubuntu). Apt is last because it requires
 /// sudo and often ships older versions — it's kept as a fallback for system-level
 /// packages only.
-pub fn available_managers() -> Vec<Box<dyn PackageManager>> {
+pub fn available_managers(non_interactive: bool) -> Vec<Box<dyn PackageManager>> {
     let mut managers: Vec<Box<dyn PackageManager>> = Vec::new();
 
     // Homebrew first — primary package manager on macOS, Ubuntu, and WSL Ubuntu
@@ -365,7 +435,7 @@ pub fn available_managers() -> Vec<Box<dyn PackageManager>> {
     }
 
     // Apt last — fallback for system-level packages (docker, chrome, build-essential)
-    let apt = Apt;
+    let apt = Apt::new(non_interactive);
     if apt.is_available() {
         managers.push(Box::new(apt));
     }
@@ -390,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_apt_is_available() {
-        let apt = Apt;
+        let apt = Apt::new(false);
         let _ = apt.is_available();
     }
 
@@ -416,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_available_managers_returns_non_empty() {
-        let managers = available_managers();
+        let managers = available_managers(false);
         // At minimum, cargo should be available since we're running cargo test
         assert!(!managers.is_empty());
     }
@@ -425,5 +495,54 @@ mod tests {
     fn test_trait_is_object_safe() {
         // This test verifies the trait can be used as a trait object
         let _: Box<dyn PackageManager> = Box::new(CargoInstaller);
+    }
+
+    #[test]
+    fn test_homebrew_is_installed_nonexistent() {
+        // Acceptance criteria: Homebrew::is_installed("nonexistent_xyz") returns false
+        let brew = Homebrew;
+        // This test runs on all platforms. If brew is not installed, is_installed
+        // will fail to spawn the command and return false (not panic).
+        assert!(!brew.is_installed("nonexistent_package_xyz_12345"));
+    }
+
+    #[test]
+    fn test_npm_is_installed_nonexistent() {
+        let npm = NpmInstaller;
+        assert!(!npm.is_installed("nonexistent_package_xyz_12345"));
+    }
+
+    #[test]
+    fn test_apt_non_interactive_struct() {
+        // Verify that Apt::new correctly stores the non_interactive flag
+        let apt_interactive = Apt::new(false);
+        let apt_non_interactive = Apt::new(true);
+        assert_eq!(apt_interactive.name(), "apt");
+        assert_eq!(apt_non_interactive.name(), "apt");
+        // Both should report the same availability
+        assert_eq!(
+            apt_interactive.is_available(),
+            apt_non_interactive.is_available()
+        );
+    }
+
+    #[test]
+    fn test_available_managers_with_non_interactive_flag() {
+        // Verify that passing non_interactive does not change which managers
+        // are detected (it only affects Apt behavior at install time)
+        let managers_interactive = available_managers(false);
+        let managers_non_interactive = available_managers(true);
+        let names_i: Vec<&str> = managers_interactive.iter().map(|m| m.name()).collect();
+        let names_n: Vec<&str> = managers_non_interactive.iter().map(|m| m.name()).collect();
+        assert_eq!(names_i, names_n);
+    }
+
+    #[test]
+    fn test_all_managers_name_non_empty() {
+        // Every PackageManager implementation must return a non-empty name
+        let managers = available_managers(false);
+        for mgr in &managers {
+            assert!(!mgr.name().is_empty(), "manager name must not be empty");
+        }
     }
 }

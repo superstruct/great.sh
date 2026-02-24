@@ -105,7 +105,7 @@ pub fn run(args: Args) -> Result<()> {
     if args.fix && !result.fixable.is_empty() {
         println!();
         output::header("Auto-fix");
-        let managers = package_manager::available_managers();
+        let managers = package_manager::available_managers(false);
         let mut fixed = 0;
 
         for issue in &result.fixable {

@@ -539,7 +539,7 @@ pub fn run(args: Args) -> Result<()> {
         if let Some(cli_tools) = &tools.cli {
             if !cli_tools.is_empty() {
                 output::header("CLI Tools");
-                let managers = package_manager::available_managers();
+                let managers = package_manager::available_managers(false);
 
                 for (name, version) in cli_tools {
                     // Check binary name — some tools have different binary vs config names
@@ -697,7 +697,7 @@ pub fn run(args: Args) -> Result<()> {
             } else {
                 output::header("Bitwarden CLI");
                 output::info("Secrets provider is bitwarden — installing bw CLI...");
-                let managers = package_manager::available_managers();
+                let managers = package_manager::available_managers(false);
                 let spec = tool_install_spec("bw").expect("bw has install spec");
                 match install_with_spec(&spec, &managers, None) {
                     Ok(Some(method)) => {
@@ -770,7 +770,7 @@ pub fn run(args: Args) -> Result<()> {
         if let Some(extra_tools) = override_tools {
             if !extra_tools.is_empty() {
                 output::header("Platform-specific tools");
-                let managers = package_manager::available_managers();
+                let managers = package_manager::available_managers(false);
                 for tool in extra_tools {
                     if command_exists(tool) {
                         output::success(&format!("  {} — already installed", tool));
