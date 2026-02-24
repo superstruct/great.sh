@@ -41,3 +41,11 @@ dist-ssr
 
 # great.sh Loop working state
 .tasks/
+
+# CDK synthesized output
+infra/cdk/cdk.out/
+
+# Local VM/platform storage
+macos-storage/
+ubuntu-vm-storage/
+windows-storage/
