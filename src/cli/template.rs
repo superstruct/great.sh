@@ -345,6 +345,7 @@ mod tests {
             project: Some(ProjectConfig {
                 name: Some("existing".into()),
                 description: Some("existing desc".into()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -352,6 +353,7 @@ mod tests {
             project: Some(ProjectConfig {
                 name: Some("template".into()),
                 description: Some("template desc".into()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -368,6 +370,7 @@ mod tests {
             project: Some(ProjectConfig {
                 name: Some("from-template".into()),
                 description: None,
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -464,6 +467,7 @@ mod tests {
                 AgentConfig {
                     provider: Some("anthropic".into()),
                     model: Some("opus".into()),
+                    ..Default::default()
                 },
             )])),
             ..Default::default()
@@ -474,6 +478,7 @@ mod tests {
                 AgentConfig {
                     provider: Some("anthropic".into()),
                     model: Some("sonnet".into()),
+                    ..Default::default()
                 },
             )])),
             ..Default::default()
@@ -491,6 +496,7 @@ mod tests {
                 AgentConfig {
                     provider: Some("anthropic".into()),
                     model: None,
+                    ..Default::default()
                 },
             )])),
             ..Default::default()
@@ -501,6 +507,7 @@ mod tests {
                 AgentConfig {
                     provider: Some("openai".into()),
                     model: Some("gpt-4".into()),
+                    ..Default::default()
                 },
             )])),
             ..Default::default()
@@ -523,6 +530,7 @@ mod tests {
                     env: None,
                     transport: None,
                     url: None,
+                    enabled: None,
                 },
             )])),
             ..Default::default()
@@ -537,6 +545,7 @@ mod tests {
                         env: None,
                         transport: None,
                         url: None,
+                        enabled: None,
                     },
                 ),
                 (
@@ -547,6 +556,7 @@ mod tests {
                         env: None,
                         transport: None,
                         url: None,
+                        enabled: None,
                     },
                 ),
             ])),

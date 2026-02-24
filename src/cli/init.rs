@@ -60,7 +60,7 @@ pub fn run(args: Args) -> Result<()> {
     let project_name = prompt("Project name", &detect_project_name())?;
     config.project = Some(ProjectConfig {
         name: Some(project_name),
-        description: None,
+        ..Default::default()
     });
 
     // Tools section
@@ -160,6 +160,7 @@ pub fn run(args: Args) -> Result<()> {
         AgentConfig {
             provider: Some("anthropic".to_string()),
             model: Some("claude-sonnet-4-20250514".to_string()),
+            ..Default::default()
         },
     );
     output::success("Claude Code — included (primary agent)");
@@ -170,6 +171,7 @@ pub fn run(args: Args) -> Result<()> {
             AgentConfig {
                 provider: Some("openai".to_string()),
                 model: Some("codex-mini".to_string()),
+                ..Default::default()
             },
         );
     }
@@ -180,6 +182,7 @@ pub fn run(args: Args) -> Result<()> {
             AgentConfig {
                 provider: Some("google".to_string()),
                 model: Some("gemini-2.5-pro".to_string()),
+                ..Default::default()
             },
         );
     }
@@ -206,6 +209,7 @@ pub fn run(args: Args) -> Result<()> {
                 env: None,
                 transport: None,
                 url: None,
+                enabled: None,
             },
         );
     }

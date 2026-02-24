@@ -145,6 +145,7 @@ mod tests {
             env: None,
             transport: None,
             url: None,
+            enabled: None,
         };
         config.add_server("filesystem", &mcp);
 
@@ -171,6 +172,7 @@ mod tests {
             env: Some(HashMap::from([("PORT".to_string(), "3000".to_string())])),
             transport: None,
             url: None,
+            enabled: None,
         };
         config.add_server("test-server", &mcp);
 
@@ -215,6 +217,7 @@ mod tests {
             env: None,
             transport: None,
             url: None,
+            enabled: None,
         };
         let mcp_b = McpConfig {
             command: "cmd-b".to_string(),
@@ -222,6 +225,7 @@ mod tests {
             env: None,
             transport: None,
             url: None,
+            enabled: None,
         };
         config.add_server("alpha", &mcp_a);
         config.add_server("beta", &mcp_b);
@@ -252,6 +256,7 @@ mod tests {
             env: None,
             transport: None,
             url: None,
+            enabled: None,
         };
         config.add_server("echo-server", &mcp);
         config.save(&path).unwrap();
