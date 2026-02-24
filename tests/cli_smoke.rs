@@ -1208,3 +1208,264 @@ fn statusline_with_state_file_renders_agents() {
     assert!(stdout.contains("$1.50"), "should contain cost: {}", stdout);
     assert!(stdout.contains("90K/200K"), "should contain context: {}", stdout);
 }
+
+// -----------------------------------------------------------------------
+// Status -- expanded (task 0004)
+// -----------------------------------------------------------------------
+
+#[test]
+fn status_with_valid_config_exits_ok() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Config:"));
+}
+
+#[test]
+fn status_verbose_accepted() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .current_dir(dir.path())
+        .args(["status", "--verbose"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Platform:"));
+}
+
+#[test]
+fn status_verbose_short_flag_accepted() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .current_dir(dir.path())
+        .args(["status", "-v"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Platform:"));
+}
+
+#[test]
+fn status_json_valid_json() {
+    let dir = TempDir::new().unwrap();
+    let output = great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Must parse as valid JSON
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must be valid JSON");
+    // Must contain required top-level keys
+    assert!(parsed.get("platform").is_some());
+    assert!(parsed.get("arch").is_some());
+    assert!(parsed.get("shell").is_some());
+    assert!(parsed.get("has_issues").is_some());
+    assert!(parsed.get("issues").is_some());
+}
+
+#[test]
+fn status_json_no_config_still_valid() {
+    let dir = TempDir::new().unwrap();
+    let output = great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must be valid JSON");
+    // config_path should be null
+    assert!(parsed.get("config_path").unwrap().is_null());
+    // tools/mcp/agents/secrets should be absent or null
+    assert!(
+        parsed.get("tools").is_none() || parsed.get("tools").unwrap().is_null()
+    );
+}
+
+#[test]
+fn status_json_with_config_includes_tools() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent-tool-xyz = "latest"
+"#,
+    )
+    .unwrap();
+
+    let output = great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .output()
+        .expect("failed to run");
+
+    // --json always exits 0
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must be valid JSON");
+    // tools array should exist and contain our tool
+    let tools = parsed.get("tools").unwrap().as_array().unwrap();
+    assert!(tools.iter().any(|t| t["name"] == "nonexistent-tool-xyz"));
+    assert!(tools.iter().any(|t| t["installed"] == false));
+    // has_issues should be true (tool not installed)
+    assert_eq!(parsed["has_issues"], true);
+}
+
+#[test]
+fn status_json_with_secrets() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[secrets]
+provider = "env"
+required = ["GREAT_TEST_SECRET_PRESENT", "GREAT_TEST_SECRET_MISSING"]
+"#,
+    )
+    .unwrap();
+
+    let output = great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .env("GREAT_TEST_SECRET_PRESENT", "value")
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must be valid JSON");
+    let secrets = parsed.get("secrets").unwrap().as_array().unwrap();
+    let present = secrets
+        .iter()
+        .find(|s| s["name"] == "GREAT_TEST_SECRET_PRESENT")
+        .unwrap();
+    assert_eq!(present["is_set"], true);
+    let missing = secrets
+        .iter()
+        .find(|s| s["name"] == "GREAT_TEST_SECRET_MISSING")
+        .unwrap();
+    assert_eq!(missing["is_set"], false);
+}
+
+#[test]
+fn status_exit_code_nonzero_missing_tools() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent-tool-xyz-9999 = "latest"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not installed"));
+}
+
+#[test]
+fn status_exit_code_nonzero_missing_secrets() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[secrets]
+provider = "env"
+required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing"));
+}
+
+#[test]
+fn status_json_always_exits_zero_even_with_issues() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent-tool-xyz-9999 = "latest"
+
+[secrets]
+provider = "env"
+required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
+"#,
+    )
+    .unwrap();
+
+    // --json must exit 0 even when there are issues
+    great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn status_no_config_exits_zero() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .success();
+}
+
+#[test]
+fn status_verbose_with_config_shows_capabilities() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["status", "--verbose"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Shell:"));
+}

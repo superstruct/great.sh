@@ -24,12 +24,12 @@ impl std::fmt::Display for Platform {
 }
 
 impl Platform {
-    /// Human-readable detailed description, e.g. "macOS 15.3.1 (Aarch64)".
+    /// Human-readable detailed description, e.g. "macOS 15.3.1 (aarch64)".
     pub fn display_detailed(&self) -> String {
         match self {
             Platform::MacOS { version, arch } => {
                 let ver = version.as_deref().unwrap_or("unknown");
-                format!("macOS {} ({:?})", ver, arch)
+                format!("macOS {} ({})", ver, arch)
             }
             Platform::Linux {
                 distro,
@@ -37,7 +37,7 @@ impl Platform {
                 arch,
             } => {
                 let ver = version.as_deref().unwrap_or("unknown");
-                format!("Linux {:?} {} ({:?})", distro, ver, arch)
+                format!("Linux {:?} {} ({})", distro, ver, arch)
             }
             Platform::Wsl {
                 distro,
@@ -45,9 +45,9 @@ impl Platform {
                 arch,
             } => {
                 let ver = version.as_deref().unwrap_or("unknown");
-                format!("WSL {:?} {} ({:?})", distro, ver, arch)
+                format!("WSL {:?} {} ({})", distro, ver, arch)
             }
-            Platform::Windows { arch } => format!("Windows ({:?})", arch),
+            Platform::Windows { arch } => format!("Windows ({})", arch),
             Platform::Unknown => "Unknown".to_string(),
         }
     }

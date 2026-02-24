@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// CPU architecture detected at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -6,6 +7,16 @@ pub enum Architecture {
     X86_64,
     Aarch64,
     Unknown,
+}
+
+impl fmt::Display for Architecture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Architecture::X86_64 => write!(f, "x86_64"),
+            Architecture::Aarch64 => write!(f, "aarch64"),
+            Architecture::Unknown => write!(f, "unknown"),
+        }
+    }
 }
 
 /// Known Linux distribution families.
@@ -436,8 +447,8 @@ mod tests {
         let p = detect_platform();
         let detail = p.display_detailed();
         assert!(!detail.is_empty());
-        // display_detailed always includes architecture info
-        let arch_strs = ["X86_64", "Aarch64", "Unknown"];
+        // display_detailed always includes architecture info (lowercase via Display)
+        let arch_strs = ["x86_64", "aarch64", "unknown"];
         assert!(
             arch_strs.iter().any(|a| detail.contains(a)),
             "display_detailed() should contain architecture: {}",
