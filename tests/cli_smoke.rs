@@ -120,14 +120,187 @@ fn doctor_fix_runs_without_crash() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn diff_no_config_shows_error() {
+fn diff_no_config_exits_nonzero() {
     let dir = TempDir::new().unwrap();
     great()
         .current_dir(dir.path())
         .arg("diff")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("great.toml"));
+}
+
+#[test]
+fn diff_satisfied_config_exits_zero() {
+    let dir = TempDir::new().unwrap();
+    // Declare only tools we know exist on any CI runner
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+git = "latest"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("nothing to do"));
+}
+
+#[test]
+fn diff_missing_tool_shows_plus() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent_tool_xyz_88888 = "1.0.0"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nonexistent_tool_xyz_88888"))
+        .stderr(predicate::str::contains("great apply"));
+}
+
+#[test]
+fn diff_disabled_mcp_skipped() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.disabled-server]
+command = "nonexistent_cmd_xyz_77777"
+enabled = false
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("disabled-server").not())
+        .stderr(predicate::str::contains("disabled-server").not());
+}
+
+#[test]
+fn diff_version_mismatch_shows_tilde() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+git = "99.99.99"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git"))
+        .stdout(predicate::str::contains("want 99.99.99"));
+}
+
+#[test]
+fn diff_with_custom_config_path() {
+    let dir = TempDir::new().unwrap();
+    let config_path = dir.path().join("custom.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+[project]
+name = "custom"
+
+[tools.cli]
+git = "latest"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["diff", "--config", config_path.to_str().unwrap()])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("custom.toml"));
+}
+
+#[test]
+fn diff_summary_shows_counts() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent_tool_xyz_99999 = "1.0.0"
+
+[secrets]
+required = ["NONEXISTENT_SECRET_XYZ_99999"]
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("1 to install"))
+        .stderr(predicate::str::contains("1 secrets to resolve"))
+        .stderr(predicate::str::contains("great apply"));
+}
+
+#[test]
+fn diff_unresolved_secret_shows_red_minus() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[secrets]
+required = ["NONEXISTENT_SECRET_XYZ_88888"]
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("NONEXISTENT_SECRET_XYZ_88888"))
+        .stdout(predicate::str::contains("not set in environment"));
 }
 
 // -----------------------------------------------------------------------

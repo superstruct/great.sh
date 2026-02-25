@@ -3,6 +3,7 @@ use clap::Args as ClapArgs;
 use colored::Colorize;
 
 use crate::cli::output;
+use crate::cli::util;
 use crate::config;
 use crate::platform::command_exists;
 
@@ -26,6 +27,7 @@ pub struct Args {
 ///
 /// - `+` (green) — needs to be added / installed
 /// - `~` (yellow) — partially configured, needs attention
+/// - `-` (red) — blocked, requires manual resolution (e.g., missing secret)
 pub fn run(args: Args) -> Result<()> {
     // Load config
     let config_path = match &args.config {
@@ -34,7 +36,7 @@ pub fn run(args: Args) -> Result<()> {
             Ok(p) => p,
             Err(_) => {
                 output::error("No great.toml found. Run `great init` to create one.");
-                return Ok(());
+                std::process::exit(1);
             }
         },
     };
@@ -50,6 +52,9 @@ pub fn run(args: Args) -> Result<()> {
     println!();
 
     let mut has_diff = false;
+    let mut install_count: usize = 0;
+    let mut configure_count: usize = 0;
+    let mut secrets_count: usize = 0;
 
     // Tools diff
     if let Some(tools) = &cfg.tools {
@@ -57,19 +62,30 @@ pub fn run(args: Args) -> Result<()> {
 
         // Runtime tools
         for (name, declared_version) in &tools.runtimes {
-            // The flattened map includes the "cli" key — skip it since
-            // CLI tools are handled separately below.
             if name == "cli" {
                 continue;
             }
             let installed = command_exists(name);
             if !installed {
+                install_count += 1;
                 tool_diffs.push(format!(
                     "  {} {} {}",
                     "+".green(),
                     name.bold(),
                     format!("(need {})", declared_version).dimmed()
                 ));
+            } else if declared_version != "latest" && declared_version != "stable" {
+                if let Some(actual) = util::get_command_version(name) {
+                    if !actual.contains(declared_version.as_str()) {
+                        configure_count += 1;
+                        tool_diffs.push(format!(
+                            "  {} {} {}",
+                            "~".yellow(),
+                            name.bold(),
+                            format!("(want {}, have {})", declared_version, actual).dimmed()
+                        ));
+                    }
+                }
             }
         }
 
@@ -78,19 +94,32 @@ pub fn run(args: Args) -> Result<()> {
             for (name, declared_version) in cli_tools {
                 let installed = command_exists(name);
                 if !installed {
+                    install_count += 1;
                     tool_diffs.push(format!(
                         "  {} {} {}",
                         "+".green(),
                         name.bold(),
                         format!("(need {})", declared_version).dimmed()
                     ));
+                } else if declared_version != "latest" && declared_version != "stable" {
+                    if let Some(actual) = util::get_command_version(name) {
+                        if !actual.contains(declared_version.as_str()) {
+                            configure_count += 1;
+                            tool_diffs.push(format!(
+                                "  {} {} {}",
+                                "~".yellow(),
+                                name.bold(),
+                                format!("(want {}, have {})", declared_version, actual).dimmed()
+                            ));
+                        }
+                    }
                 }
             }
         }
 
         if !tool_diffs.is_empty() {
             has_diff = true;
-            output::header("Tools — need to install:");
+            output::header("Tools");
             for diff in &tool_diffs {
                 println!("{}", diff);
             }
@@ -103,9 +132,15 @@ pub fn run(args: Args) -> Result<()> {
         let mut mcp_diffs = Vec::new();
 
         for (name, mcp) in mcps {
+            // Skip disabled servers
+            if mcp.enabled == Some(false) {
+                continue;
+            }
+
             // Check if the command for this MCP server exists
             let cmd_available = command_exists(&mcp.command);
             if !cmd_available {
+                configure_count += 1;
                 mcp_diffs.push(format!(
                     "  {} {} {}",
                     "+".green(),
@@ -119,6 +154,7 @@ pub fn run(args: Args) -> Result<()> {
             if !mcp_json_path.exists() {
                 // .mcp.json doesn't exist at all — all declared servers need configuring
                 if cmd_available {
+                    configure_count += 1;
                     mcp_diffs.push(format!(
                         "  {} {} {}",
                         "~".yellow(),
@@ -146,9 +182,10 @@ pub fn run(args: Args) -> Result<()> {
 
             for key in required {
                 if std::env::var(key).is_err() {
+                    secrets_count += 1;
                     secret_diffs.push(format!(
                         "  {} {} {}",
-                        "+".green(),
+                        "-".red(),
                         key.bold(),
                         "(not set in environment)".dimmed()
                     ));
@@ -178,9 +215,10 @@ pub fn run(args: Args) -> Result<()> {
         has_diff = true;
         output::header("Secret References — unresolved:");
         for name in &unresolved_refs {
+            secrets_count += 1;
             println!(
                 "  {} {} {}",
-                "+".green(),
+                "-".red(),
                 name.bold(),
                 "(referenced in MCP env, not set)".dimmed()
             );
@@ -189,9 +227,20 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     if !has_diff {
-        output::success("System matches declared configuration. No changes needed.");
+        output::success("Environment matches configuration — nothing to do.");
     } else {
-        output::info("Run `great apply` to reconcile these differences.");
+        let mut parts = Vec::new();
+        if install_count > 0 {
+            parts.push(format!("{} to install", install_count));
+        }
+        if configure_count > 0 {
+            parts.push(format!("{} to configure", configure_count));
+        }
+        if secrets_count > 0 {
+            parts.push(format!("{} secrets to resolve", secrets_count));
+        }
+        let summary = parts.join(", ");
+        output::info(&format!("{} — run `great apply` to reconcile.", summary));
     }
 
     Ok(())
