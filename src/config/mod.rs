@@ -5,11 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 // Re-exported for downstream consumption by CLI subcommands.
-#[allow(unused_imports)]
-pub use schema::{
-    AgentConfig, ConfigMessage, GreatConfig, McpConfig, PlatformConfig, PlatformOverride,
-    ProjectConfig, SecretsConfig, ToolsConfig,
-};
+pub use schema::{ConfigMessage, GreatConfig};
 
 /// Load configuration from the specified path (or discover it), parse, and validate.
 ///
@@ -58,7 +54,7 @@ pub fn discover_config() -> Result<PathBuf> {
 }
 
 /// Return the platform-specific data directory (~/.local/share/great on Linux).
-#[allow(dead_code)]
+#[allow(dead_code)] // Planned for GROUP F (vault) and GROUP H (template registry).
 pub fn data_dir() -> Result<PathBuf> {
     dirs::data_dir()
         .map(|d| d.join("great"))
@@ -66,7 +62,7 @@ pub fn data_dir() -> Result<PathBuf> {
 }
 
 /// Return the platform-specific config directory (~/.config/great on Linux).
-#[allow(dead_code)]
+#[allow(dead_code)] // Planned for GROUP F (vault) and GROUP B (starship config).
 pub fn config_dir() -> Result<PathBuf> {
     dirs::config_dir()
         .map(|d| d.join("great"))

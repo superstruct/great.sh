@@ -1,25 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Status of sync between local and remote.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum SyncStatus {
-    InSync,
-    LocalNewer,
-    RemoteNewer,
-    Conflict,
-    NeverSynced,
-}
-
-/// Encrypted blob for sync transport.
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct SyncBlob {
-    pub data: Vec<u8>,
-    pub timestamp: u64,
-}
-
 /// Get the local sync directory (~/.local/share/great/sync/).
 pub fn sync_dir() -> Result<PathBuf> {
     let data_dir = dirs::data_local_dir()
@@ -36,7 +17,7 @@ pub fn export_config(config_path: &Path) -> Result<Vec<u8>> {
 }
 
 /// Import config from bytes.
-#[allow(dead_code)]
+#[allow(dead_code)] // Planned for GROUP G (sync pull --apply).
 pub fn import_config(data: &[u8], config_path: &Path) -> Result<()> {
     std::fs::write(config_path, data)
         .context(format!("failed to write {}", config_path.display()))?;

@@ -14,23 +14,12 @@ pub struct Args {
     pub fix: bool,
 }
 
+#[derive(Default)]
 struct DiagnosticResult {
     checks_passed: usize,
     checks_warned: usize,
     checks_failed: usize,
     fixable: Vec<FixableIssue>,
-}
-
-impl Default for DiagnosticResult {
-    #[allow(clippy::derivable_impls)]
-    fn default() -> Self {
-        Self {
-            checks_passed: 0,
-            checks_warned: 0,
-            checks_failed: 0,
-            fixable: Vec::new(),
-        }
-    }
 }
 
 /// An issue that can potentially be auto-fixed.

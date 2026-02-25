@@ -2,14 +2,9 @@ pub mod detection;
 pub mod package_manager;
 pub mod runtime;
 
-#[allow(unused_imports)]
 pub use detection::{
-    command_exists, detect_architecture, detect_platform, detect_platform_info, Architecture,
-    LinuxDistro, Platform, PlatformCapabilities, PlatformInfo,
+    command_exists, detect_platform_info, Architecture, LinuxDistro, Platform, PlatformInfo,
 };
-
-#[allow(unused_imports)]
-pub use runtime::{MiseManager, ProvisionAction, ProvisionResult};
 
 impl std::fmt::Display for Platform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

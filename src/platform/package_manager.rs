@@ -14,14 +14,14 @@ pub trait PackageManager {
     fn is_installed(&self, package: &str) -> bool;
 
     /// Get the installed version of a package, if any.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Part of complete PackageManager interface; planned for GROUP D (doctor --fix).
     fn installed_version(&self, package: &str) -> Option<String>;
 
     /// Install a package, optionally at a specific version.
     fn install(&self, package: &str, version: Option<&str>) -> Result<()>;
 
     /// Update a package to the latest version.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Part of complete PackageManager interface; planned for GROUP E (update command).
     fn update(&self, package: &str) -> Result<()>;
 }
 
