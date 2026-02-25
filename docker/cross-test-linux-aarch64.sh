@@ -18,6 +18,7 @@ echo "[1/4] Copying source..."
 cp -r /workspace/src /build/src
 cp -r /workspace/tests /build/tests
 [ -d /workspace/templates ] && cp -r /workspace/templates /build/templates
+[ -d /workspace/loop ] && cp -r /workspace/loop /build/loop
 cp /workspace/Cargo.toml /build/Cargo.toml
 [ -f /workspace/Cargo.lock ] && cp /workspace/Cargo.lock /build/Cargo.lock
 cd /build
