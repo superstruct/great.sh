@@ -8,6 +8,7 @@ FROM rust:1.88-slim
 RUN apt-get update && apt-get install -y \
     gcc-aarch64-linux-gnu \
     libc6-dev-arm64-cross \
+    file \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup target add aarch64-unknown-linux-gnu
