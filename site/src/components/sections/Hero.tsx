@@ -24,7 +24,7 @@ export function Hero() {
             transition={{ duration: 0.4 }}
             className="text-xs font-mono text-accent border border-accent/30 bg-accent-muted px-3 py-1 rounded-full mb-4 inline-block"
           >
-            beta — open to testing &amp; feedback
+            alpha — open to testing &amp; feedback
           </motion.span>
 
           <motion.div

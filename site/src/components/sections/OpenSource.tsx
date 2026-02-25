@@ -47,7 +47,7 @@ export function OpenSource() {
           </motion.div>
 
           <p className="text-text-tertiary text-sm mt-6">
-            great.sh is in beta. Found a bug or have a suggestion?{' '}
+            great.sh is in alpha. Found a bug or have a suggestion?{' '}
             <a
               href="https://github.com/superstruct/great.sh/issues"
               target="_blank"

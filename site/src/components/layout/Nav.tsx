@@ -35,7 +35,7 @@ export function Nav() {
           <span className="text-accent font-mono font-bold">&gt;</span>
           great.sh
           <span className="text-[10px] font-mono text-accent border border-accent/30 bg-accent-muted px-1.5 py-0.5 rounded-full">
-            beta
+            alpha
           </span>
         </a>
 

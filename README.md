@@ -1,6 +1,6 @@
 # > great.sh
 
-**The managed AI dev environment.** Beta — open to testing and feedback.
+**The managed AI dev environment.** Alpha — open to testing and feedback.
 
 One command. 15 AI agents. Fully configured. Open source.
 
@@ -74,7 +74,7 @@ pnpm build:site
 
 ## Status
 
-Beta (v0.1.0). Core features work. We welcome bug reports and feedback.
+Alpha (v0.1.0). Core features work. We welcome bug reports and feedback.
 
 - [GitHub Issues](https://github.com/superstruct/great.sh/issues)
 - [Discussions](https://github.com/superstruct/great.sh/discussions)
