@@ -4,8 +4,9 @@
 #   docker compose up --build ubuntu      # Test on Ubuntu 22.04
 #   docker compose up --build fedora      # Test on Fedora 39
 #   docker compose run ubuntu bash        # Interactive shell
-#   docker compose run macos-cross        # Cross-compile macOS binaries
-#   docker compose run windows-cross      # Cross-compile Windows binary
+#   docker compose run --build macos-cross          # Cross-compile macOS binaries
+#   docker compose run --build windows-cross        # Cross-compile Windows binary
+#   docker compose run --build linux-aarch64-cross  # Cross-compile Linux ARM64 binary
 #   docker compose up macos               # Boot macOS VM (requires KVM)
 #   docker compose up windows             # Boot Windows VM (requires KVM)
 #   docker compose up ubuntu-vm           # Boot Ubuntu VM (requires KVM)
@@ -63,6 +64,18 @@ services:
       - ./test-files:/workspace/test-files
     working_dir: /build
     command: ["bash", "/workspace/docker/cross-test-windows.sh"]
+
+  # Linux aarch64 (ARM64) cross-compilation
+  linux-aarch64-cross:
+    build:
+      context: .
+      dockerfile: docker/cross-linux-aarch64.Dockerfile
+    volumes:
+      - .:/workspace:ro
+      - cargo-cache-linux-aarch64:/root/.cargo/registry
+      - ./test-files:/workspace/test-files
+    working_dir: /build
+    command: ["bash", "/workspace/docker/cross-test-linux-aarch64.sh"]
 
   # ── Layer 2: VNC/VM — graphical host integration testing ───────────
 
@@ -136,3 +149,4 @@ volumes:
   cargo-cache-fedora:
   cargo-cache-macos:
   cargo-cache-windows:
+  cargo-cache-linux-aarch64:
