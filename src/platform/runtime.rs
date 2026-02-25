@@ -149,9 +149,7 @@ impl MiseManager {
             let text = String::from_utf8_lossy(&output.stdout);
             let version = text.trim();
             let lower = version.to_lowercase();
-            if version.is_empty()
-                || lower.contains("no version")
-                || lower.contains("not installed")
+            if version.is_empty() || lower.contains("no version") || lower.contains("not installed")
             {
                 None
             } else {
@@ -358,8 +356,8 @@ mod tests {
 
     #[test]
     fn test_provision_skips_cli_key() {
-        use std::collections::HashMap;
         use crate::config::schema::ToolsConfig;
+        use std::collections::HashMap;
         let tools = ToolsConfig {
             runtimes: {
                 let mut m = HashMap::new();
@@ -375,8 +373,8 @@ mod tests {
 
     #[test]
     fn test_provision_empty_runtimes() {
-        use std::collections::HashMap;
         use crate::config::schema::ToolsConfig;
+        use std::collections::HashMap;
         let tools = ToolsConfig {
             runtimes: HashMap::new(),
             cli: None,
