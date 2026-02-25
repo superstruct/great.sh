@@ -229,7 +229,9 @@ impl GreatConfig {
                     if !known.contains(&provider.as_str()) {
                         messages.push(ConfigMessage::Warning(format!(
                             "agent '{}': unknown provider '{}' -- known providers: {}",
-                            name, provider, known.join(", ")
+                            name,
+                            provider,
+                            known.join(", ")
                         )));
                     }
                 }
@@ -623,7 +625,11 @@ command = ""
             ConfigMessage::Error(e) => e.contains("command") && e.contains("broken"),
             _ => false,
         });
-        assert!(has_error, "expected error for empty command: {:?}", messages);
+        assert!(
+            has_error,
+            "expected error for empty command: {:?}",
+            messages
+        );
     }
 
     #[test]

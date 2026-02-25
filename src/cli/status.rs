@@ -97,14 +97,12 @@ pub fn run(args: Args) -> Result<()> {
     // -- Discover and load config (shared by both output modes) ---------
     let (config_path_str, config) = match config::discover_config() {
         Ok(path) => {
-            let path_str = path
-                .to_str()
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "config path contains non-UTF-8 characters: {}",
-                        path.display()
-                    )
-                })?;
+            let path_str = path.to_str().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "config path contains non-UTF-8 characters: {}",
+                    path.display()
+                )
+            })?;
             let path_owned = path_str.to_string();
             match config::load(Some(&path_owned)) {
                 Ok(cfg) => (Some(path_owned), Some(cfg)),
@@ -232,11 +230,7 @@ pub fn run(args: Args) -> Result<()> {
                 let cmd_available = command_exists(&mcp.command);
                 if cmd_available {
                     if args.verbose {
-                        let args_str = mcp
-                            .args
-                            .as_ref()
-                            .map(|a| a.join(" "))
-                            .unwrap_or_default();
+                        let args_str = mcp.args.as_ref().map(|a| a.join(" ")).unwrap_or_default();
                         let transport = mcp.transport.as_deref().unwrap_or("stdio");
                         if args_str.is_empty() {
                             output::success(&format!(
@@ -253,10 +247,7 @@ pub fn run(args: Args) -> Result<()> {
                         output::success(&format!("  {} ({})", name, mcp.command));
                     }
                 } else {
-                    output::error(&format!(
-                        "  {} ({} -- not found)",
-                        name, mcp.command
-                    ));
+                    output::error(&format!("  {} ({} -- not found)", name, mcp.command));
                 }
             }
         }
@@ -443,14 +434,8 @@ fn print_tool_status(
             (Some(full), false) => full.split_whitespace().last().unwrap_or(full),
             (None, _) => "installed",
         };
-        output::success(&format!(
-            "  {} {} ({})",
-            name, declared_version, ver_info
-        ));
+        output::success(&format!("  {} {} ({})", name, declared_version, ver_info));
     } else {
-        output::error(&format!(
-            "  {} {} -- not installed",
-            name, declared_version
-        ));
+        output::error(&format!("  {} {} -- not installed", name, declared_version));
     }
 }

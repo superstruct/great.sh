@@ -356,9 +356,7 @@ fn run_install(project: bool, force: bool) -> Result<()> {
                 }
             }
             Err(_) => {
-                output::warning(
-                    "settings.json is not valid JSON; skipping statusLine injection",
-                );
+                output::warning("settings.json is not valid JSON; skipping statusLine injection");
             }
         }
     }
@@ -715,8 +713,16 @@ mod tests {
 
         assert!(needs_write, "broken statusLine should trigger a write");
         let sl = obj.get("statusLine").unwrap();
-        assert_eq!(sl["type"].as_str(), Some("command"), "repair must add type field");
-        assert_eq!(sl["command"].as_str(), Some("great statusline"), "repair must preserve command");
+        assert_eq!(
+            sl["type"].as_str(),
+            Some("command"),
+            "repair must add type field"
+        );
+        assert_eq!(
+            sl["command"].as_str(),
+            Some("great statusline"),
+            "repair must preserve command"
+        );
         // Other keys must survive the round-trip
         assert_eq!(settings["env"]["SOME_KEY"].as_str(), Some("value"));
     }
@@ -745,7 +751,10 @@ mod tests {
             false
         };
 
-        assert!(!needs_write, "correct statusLine should NOT trigger a write");
+        assert!(
+            !needs_write,
+            "correct statusLine should NOT trigger a write"
+        );
     }
 
     #[test]

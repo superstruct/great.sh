@@ -649,10 +649,7 @@ fn statusline_empty_stdin_exits_zero() {
 
 #[test]
 fn statusline_no_stdin_exits_zero() {
-    great()
-        .arg("statusline")
-        .assert()
-        .success();
+    great().arg("statusline").assert().success();
 }
 
 #[test]
@@ -919,7 +916,10 @@ fn statusline_zero_agents_valid_state_exits_zero() {
 
     std::fs::write(
         &state_path,
-        format!(r#"{{"loop_id": "test", "started_at": {}, "agents": []}}"#, now - 60),
+        format!(
+            r#"{{"loop_id": "test", "started_at": {}, "agents": []}}"#,
+            now - 60
+        ),
     )
     .unwrap();
 
@@ -963,7 +963,9 @@ fn statusline_100_agents_exits_zero() {
         .map(|i| {
             format!(
                 r#"{{"id": {}, "name": "agent{}", "status": "running", "updated_at": {}}}"#,
-                i, i, now - 2
+                i,
+                i,
+                now - 2
             )
         })
         .collect();
@@ -1003,7 +1005,12 @@ fn statusline_100_agents_exits_zero() {
     );
     // Should still be exactly one line
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 1, "must print exactly one line, got: {:?}", lines);
+    assert_eq!(
+        lines.len(),
+        1,
+        "must print exactly one line, got: {:?}",
+        lines
+    );
 }
 
 #[test]
@@ -1405,7 +1412,9 @@ fn loop_install_force_overwrites_existing() {
         .env("HOME", dir.path())
         .assert()
         .success()
-        .stderr(predicate::str::contains("--force: overwriting existing files"));
+        .stderr(predicate::str::contains(
+            "--force: overwriting existing files",
+        ));
 
     // Verify file was overwritten
     let content = std::fs::read_to_string(&agent_path).unwrap();
@@ -1466,9 +1475,17 @@ fn statusline_with_state_file_renders_agents() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Should contain "loop", cost, context info, and agent data
-    assert!(stdout.contains("loop"), "should contain 'loop' label: {}", stdout);
+    assert!(
+        stdout.contains("loop"),
+        "should contain 'loop' label: {}",
+        stdout
+    );
     assert!(stdout.contains("$1.50"), "should contain cost: {}", stdout);
-    assert!(stdout.contains("90K/200K"), "should contain context: {}", stdout);
+    assert!(
+        stdout.contains("90K/200K"),
+        "should contain context: {}",
+        stdout
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -1552,9 +1569,7 @@ fn status_json_no_config_still_valid() {
     // config_path should be null
     assert!(parsed.get("config_path").unwrap().is_null());
     // tools/mcp/agents/secrets should be absent or null
-    assert!(
-        parsed.get("tools").is_none() || parsed.get("tools").unwrap().is_null()
-    );
+    assert!(parsed.get("tools").is_none() || parsed.get("tools").unwrap().is_null());
 }
 
 #[test]

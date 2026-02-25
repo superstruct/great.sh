@@ -567,10 +567,7 @@ fn check_mcp_servers(result: &mut DiagnosticResult, cfg: &config::GreatConfig) {
         } else {
             fail(
                 result,
-                &format!(
-                    "{}: command '{}' not found on PATH",
-                    name, mcp.command
-                ),
+                &format!("{}: command '{}' not found on PATH", name, mcp.command),
             );
         }
     }
@@ -772,4 +769,3 @@ fn check_system_tuning(result: &mut DiagnosticResult, info: &PlatformInfo) {
 
     println!();
 }
-

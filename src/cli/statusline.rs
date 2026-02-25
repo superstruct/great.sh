@@ -166,7 +166,14 @@ fn run_inner(args: Args) -> Result<()> {
     let use_unicode = !args.no_unicode;
 
     // 6. Render
-    let line = render(&session, &state, &config, width, use_unicode, had_parse_error);
+    let line = render(
+        &session,
+        &state,
+        &config,
+        width,
+        use_unicode,
+        had_parse_error,
+    );
 
     // 7. Print exactly one line to stdout
     println!("{}", line);
@@ -431,11 +438,7 @@ fn render_summary(agents: &[AgentState], use_unicode: bool) -> String {
     };
 
     if counts.done > 0 {
-        parts.push(
-            format!("{}{}", counts.done, done_sym)
-                .green()
-                .to_string(),
-        );
+        parts.push(format!("{}{}", counts.done, done_sym).green().to_string());
     }
 
     if counts.running > 0 {
@@ -477,10 +480,10 @@ fn render_summary(agents: &[AgentState], use_unicode: bool) -> String {
 fn status_symbol(status: AgentStatus, use_unicode: bool) -> &'static str {
     if use_unicode {
         match status {
-            AgentStatus::Running => "\u{25CF}",  // filled circle
-            AgentStatus::Done => "\u{2713}",     // checkmark
-            AgentStatus::Queued => "\u{25CC}",   // dotted circle
-            AgentStatus::Error => "\u{2717}",    // ballot X
+            AgentStatus::Running => "\u{25CF}", // filled circle
+            AgentStatus::Done => "\u{2713}",    // checkmark
+            AgentStatus::Queued => "\u{25CC}",  // dotted circle
+            AgentStatus::Error => "\u{2717}",   // ballot X
             AgentStatus::Idle | AgentStatus::Unknown => "\u{25CB}", // open circle
         }
     } else {
@@ -611,7 +614,12 @@ fn render(
                 let _ = write!(out, "{}{}", sep, wide_agents);
             } else {
                 // Fall back to medium-mode compact indicators
-                let _ = write!(out, "{}{}", sep, render_agents_medium(&state.agents, use_unicode));
+                let _ = write!(
+                    out,
+                    "{}{}",
+                    sep,
+                    render_agents_medium(&state.agents, use_unicode)
+                );
             }
             let _ = write!(out, "{}{}", sep, summary);
         } else {
@@ -637,7 +645,12 @@ fn render(
             let _ = write!(out, "{}{}", sep, "ERR:state".bright_red());
         } else {
             if !state.agents.is_empty() {
-                let _ = write!(out, "{}{}", sep, render_agents_medium(&state.agents, use_unicode));
+                let _ = write!(
+                    out,
+                    "{}{}",
+                    sep,
+                    render_agents_medium(&state.agents, use_unicode)
+                );
                 let _ = write!(out, "{}{}", sep, render_summary(&state.agents, use_unicode));
             } else {
                 let _ = write!(out, "{}{}", sep, "idle".dimmed());
@@ -813,11 +826,36 @@ session_timeout_secs = 60
     #[test]
     fn test_count_statuses() {
         let agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 3, name: "c".into(), status: AgentStatus::Running, updated_at: 0 },
-            AgentState { id: 4, name: "d".into(), status: AgentStatus::Error, updated_at: 0 },
-            AgentState { id: 5, name: "e".into(), status: AgentStatus::Idle, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 3,
+                name: "c".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 4,
+                name: "d".into(),
+                status: AgentStatus::Error,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 5,
+                name: "e".into(),
+                status: AgentStatus::Idle,
+                updated_at: 0,
+            },
         ];
         let counts = count_statuses(&agents);
         assert_eq!(counts.done, 2);
@@ -833,10 +871,30 @@ session_timeout_secs = 60
     fn test_render_summary_unicode() {
         colored::control::set_override(false);
         let agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Running, updated_at: 0 },
-            AgentState { id: 3, name: "c".into(), status: AgentStatus::Error, updated_at: 0 },
-            AgentState { id: 4, name: "d".into(), status: AgentStatus::Queued, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 3,
+                name: "c".into(),
+                status: AgentStatus::Error,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 4,
+                name: "d".into(),
+                status: AgentStatus::Queued,
+                updated_at: 0,
+            },
         ];
         let summary = render_summary(&agents, true);
         assert!(summary.contains('\u{2713}')); // checkmark (done)
@@ -849,9 +907,24 @@ session_timeout_secs = 60
     fn test_render_summary_ascii() {
         colored::control::set_override(false);
         let agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Running, updated_at: 0 },
-            AgentState { id: 3, name: "c".into(), status: AgentStatus::Queued, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 3,
+                name: "c".into(),
+                status: AgentStatus::Queued,
+                updated_at: 0,
+            },
         ];
         let summary = render_summary(&agents, false);
         assert!(summary.contains('v')); // done
@@ -863,8 +936,18 @@ session_timeout_secs = 60
     fn test_render_agents_wide_unicode() {
         colored::control::set_override(false);
         let agents = vec![
-            AgentState { id: 1, name: "nightingale".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 2, name: "lovelace".into(), status: AgentStatus::Running, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "nightingale".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "lovelace".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
         ];
         let result = render_agents_wide(&agents, true);
         assert!(result.contains('1'));
@@ -875,9 +958,24 @@ session_timeout_secs = 60
     fn test_render_agents_medium_ascii() {
         colored::control::set_override(false);
         let agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Done, updated_at: 0 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Running, updated_at: 0 },
-            AgentState { id: 3, name: "c".into(), status: AgentStatus::Error, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 3,
+                name: "c".into(),
+                status: AgentStatus::Error,
+                updated_at: 0,
+            },
         ];
         let result = render_agents_medium(&agents, false);
         assert!(!result.is_empty());
@@ -941,8 +1039,18 @@ session_timeout_secs = 60
         let session = SessionInfo::default();
         let state = LoopState {
             agents: vec![
-                AgentState { id: 1, name: "a".into(), status: AgentStatus::Done, updated_at: 0 },
-                AgentState { id: 2, name: "b".into(), status: AgentStatus::Running, updated_at: 0 },
+                AgentState {
+                    id: 1,
+                    name: "a".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 2,
+                    name: "b".into(),
+                    status: AgentStatus::Running,
+                    updated_at: 0,
+                },
             ],
             ..Default::default()
         };
@@ -964,9 +1072,24 @@ session_timeout_secs = 60
             .unwrap()
             .as_secs();
         let mut agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Running, updated_at: now - 60 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Running, updated_at: now - 5 },
-            AgentState { id: 3, name: "c".into(), status: AgentStatus::Done, updated_at: now - 60 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Running,
+                updated_at: now - 60,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Running,
+                updated_at: now - 5,
+            },
+            AgentState {
+                id: 3,
+                name: "c".into(),
+                status: AgentStatus::Done,
+                updated_at: now - 60,
+            },
         ];
         apply_timeout(&mut agents, 30);
         assert_eq!(agents[0].status, AgentStatus::Idle);
@@ -1114,8 +1237,16 @@ session_timeout_secs = 60
         };
         let config = StatuslineConfig::default();
         let line = render(&session, &state, &config, 100, true, false);
-        assert!(line.contains("$0.14"), "medium mode must show cost: {}", line);
-        assert!(line.contains("45K/200K"), "medium mode must show context: {}", line);
+        assert!(
+            line.contains("$0.14"),
+            "medium mode must show cost: {}",
+            line
+        );
+        assert!(
+            line.contains("45K/200K"),
+            "medium mode must show context: {}",
+            line
+        );
     }
 
     // --- F2: Summary uses per-agent vocabulary ---
@@ -1124,13 +1255,31 @@ session_timeout_secs = 60
     fn test_render_summary_splits_running_and_queued() {
         colored::control::set_override(false);
         let agents = vec![
-            AgentState { id: 1, name: "a".into(), status: AgentStatus::Running, updated_at: 0 },
-            AgentState { id: 2, name: "b".into(), status: AgentStatus::Queued, updated_at: 0 },
+            AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            },
+            AgentState {
+                id: 2,
+                name: "b".into(),
+                status: AgentStatus::Queued,
+                updated_at: 0,
+            },
         ];
         let summary = render_summary(&agents, false);
         // ASCII: running=*, queued=. -- must be separate
-        assert!(summary.contains('*'), "should show running indicator: {}", summary);
-        assert!(summary.contains('.'), "should show queued indicator: {}", summary);
+        assert!(
+            summary.contains('*'),
+            "should show running indicator: {}",
+            summary
+        );
+        assert!(
+            summary.contains('.'),
+            "should show queued indicator: {}",
+            summary
+        );
     }
 
     // --- F3: Overflow guard ---
@@ -1204,7 +1353,15 @@ session_timeout_secs = 60
         let config = StatuslineConfig::default();
         let line = render(&session, &state, &config, 150, true, true);
         assert!(line.contains("ERR:state"));
-        assert!(!line.contains("$0.14"), "cost must not leak after ERR:state: {}", line);
-        assert!(!line.contains("45K"), "context must not leak after ERR:state: {}", line);
+        assert!(
+            !line.contains("$0.14"),
+            "cost must not leak after ERR:state: {}",
+            line
+        );
+        assert!(
+            !line.contains("45K"),
+            "context must not leak after ERR:state: {}",
+            line
+        );
     }
 }

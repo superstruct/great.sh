@@ -114,7 +114,11 @@ impl PackageManager for Homebrew {
             .status()
             .context(format!("failed to run brew upgrade {}", package))?;
         if !status.success() {
-            bail!("brew upgrade {} failed (exit code {:?})", package, status.code());
+            bail!(
+                "brew upgrade {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
@@ -305,7 +309,11 @@ impl PackageManager for CargoInstaller {
             .status()
             .context(format!("failed to run cargo install {}", package))?;
         if !status.success() {
-            bail!("cargo install {} failed (exit code {:?})", package, status.code());
+            bail!(
+                "cargo install {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
@@ -320,7 +328,11 @@ impl PackageManager for CargoInstaller {
             .status()
             .context(format!("failed to update {}", package))?;
         if !status.success() {
-            bail!("cargo install --force {} failed (exit code {:?})", package, status.code());
+            bail!(
+                "cargo install --force {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
@@ -384,7 +396,11 @@ impl PackageManager for NpmInstaller {
             .status()
             .context(format!("failed to run npm install -g {}", pkg_spec))?;
         if !status.success() {
-            bail!("npm install -g {} failed (exit code {:?})", pkg_spec, status.code());
+            bail!(
+                "npm install -g {} failed (exit code {:?})",
+                pkg_spec,
+                status.code()
+            );
         }
         Ok(())
     }
@@ -398,7 +414,11 @@ impl PackageManager for NpmInstaller {
             .status()
             .context(format!("failed to update {}", package))?;
         if !status.success() {
-            bail!("npm update -g {} failed (exit code {:?})", package, status.code());
+            bail!(
+                "npm update -g {} failed (exit code {:?})",
+                package,
+                status.code()
+            );
         }
         Ok(())
     }
