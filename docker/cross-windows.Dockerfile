@@ -3,7 +3,6 @@
 # Usage:
 #   docker compose build windows-cross
 #   docker compose run windows-cross
-#   docker compose run windows-cross cargo build --release --target x86_64-pc-windows-gnu
 FROM rust:1.88-slim
 
 RUN apt-get update && apt-get install -y \
@@ -13,6 +12,6 @@ RUN apt-get update && apt-get install -y \
 
 RUN rustup target add x86_64-pc-windows-gnu
 
-WORKDIR /workspace
+WORKDIR /build
 
-CMD ["cargo", "build", "--release", "--target", "x86_64-pc-windows-gnu"]
+CMD ["bash", "/workspace/docker/cross-test-windows.sh"]

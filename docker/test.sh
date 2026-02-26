@@ -11,6 +11,10 @@ echo "  great.sh test run — ${PLATFORM}"
 echo "============================================"
 echo ""
 
+# Print toolchain version for build log traceability
+echo "Toolchain: $(rustc --version)"
+echo ""
+
 # Copy source (workspace is read-only mounted)
 echo "[1/5] Copying source..."
 cp -r /workspace/src /build/src
@@ -38,7 +42,11 @@ BIN="./target/release/great"
 
 ${BIN} --version
 ${BIN} --help > /dev/null
-${BIN} doctor 2>&1 || true
+doctor_rc=0
+${BIN} doctor 2>&1 || doctor_rc=$?
+if [ "$doctor_rc" -ne 0 ]; then
+    echo "[WARN] great doctor exited non-zero (exit ${doctor_rc})"
+fi
 ${BIN} template list 2>&1
 
 echo ""

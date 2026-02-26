@@ -2,7 +2,7 @@
 # macOS cross-compilation build + validation script.
 #
 # Runs inside the cross-macos container. Builds for both x86_64 and aarch64,
-# validates the output binaries, and copies them to /workspace/test-files/
+# validates the output binaries, and copies them to /build/test-files/
 # for the macOS VM to pick up.
 set -euo pipefail
 
@@ -14,6 +14,10 @@ TARGETS=(x86_64-apple-darwin aarch64-apple-darwin)
 echo "============================================"
 echo "  great.sh macOS cross-compilation"
 echo "============================================"
+echo ""
+
+# Print toolchain version for build log traceability
+echo "Toolchain: $(rustc --version)"
 echo ""
 
 # Copy source to writable build dir (workspace is read-only)
@@ -61,13 +65,14 @@ for target in "${TARGETS[@]}"; do
     esac
 done
 
-# Export binaries to shared volume
+# Export binaries to shared volume.
+# Output goes to /build/test-files/ (writable); /workspace is read-only.
 echo "[4/4] Exporting binaries..."
-mkdir -p /workspace/test-files
+mkdir -p /build/test-files
 for target in "${TARGETS[@]}"; do
     src="target/${target}/release/great"
     # Name like great-x86_64-apple-darwin
-    dest="/workspace/test-files/great-${target}"
+    dest="/build/test-files/great-${target}"
     cp "$src" "$dest"
     size=$(du -h "$dest" | cut -f1)
     echo "  ${dest} (${size})"
@@ -76,5 +81,5 @@ done
 echo ""
 echo "============================================"
 echo "  Cross-compilation complete"
-echo "  Binaries in /workspace/test-files/"
+echo "  Binaries in /build/test-files/"
 echo "============================================"

@@ -2,7 +2,7 @@
 # Windows cross-compilation build + validation script.
 #
 # Runs inside the cross-windows container. Builds for x86_64-pc-windows-gnu,
-# validates the output binary, and copies it to /workspace/test-files/
+# validates the output binary, and copies it to /build/test-files/
 # for the Windows VM to pick up.
 set -euo pipefail
 
@@ -11,6 +11,10 @@ TARGET="x86_64-pc-windows-gnu"
 echo "============================================"
 echo "  great.sh Windows cross-compilation"
 echo "============================================"
+echo ""
+
+# Print toolchain version for build log traceability
+echo "Toolchain: $(rustc --version)"
 echo ""
 
 # Copy source to writable build dir (workspace is read-only)
@@ -43,10 +47,11 @@ if ! echo "$file_output" | grep -q "PE32+"; then
     exit 1
 fi
 
-# Export binary to shared volume
+# Export binary to shared volume.
+# Output goes to /build/test-files/ (writable); /workspace is read-only.
 echo "[4/4] Exporting binary..."
-mkdir -p /workspace/test-files
-dest="/workspace/test-files/great-${TARGET}.exe"
+mkdir -p /build/test-files
+dest="/build/test-files/great-${TARGET}.exe"
 cp "$bin" "$dest"
 size=$(du -h "$dest" | cut -f1)
 echo "  ${dest} (${size})"
@@ -54,5 +59,5 @@ echo "  ${dest} (${size})"
 echo ""
 echo "============================================"
 echo "  Cross-compilation complete"
-echo "  Binary in /workspace/test-files/"
+echo "  Binary in /build/test-files/"
 echo "============================================"

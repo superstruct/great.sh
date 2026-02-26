@@ -49,7 +49,7 @@ services:
     volumes:
       - .:/workspace:ro
       - cargo-cache-macos:/opt/rust/registry
-      - ./test-files:/workspace/test-files
+      - ./test-files:/build/test-files
     working_dir: /build
     command: ["bash", "/workspace/docker/cross-test-macos.sh"]
 
@@ -61,7 +61,7 @@ services:
     volumes:
       - .:/workspace:ro
       - cargo-cache-windows:/root/.cargo/registry
-      - ./test-files:/workspace/test-files
+      - ./test-files:/build/test-files
     working_dir: /build
     command: ["bash", "/workspace/docker/cross-test-windows.sh"]
 
@@ -73,7 +73,7 @@ services:
     volumes:
       - .:/workspace:ro
       - cargo-cache-linux-aarch64:/root/.cargo/registry
-      - ./test-files:/workspace/test-files
+      - ./test-files:/build/test-files
     working_dir: /build
     command: ["bash", "/workspace/docker/cross-test-linux-aarch64.sh"]
 
