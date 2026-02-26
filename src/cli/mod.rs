@@ -7,6 +7,7 @@ pub mod loop_cmd;
 pub mod mcp;
 pub mod output;
 pub mod status;
+pub mod sudo;
 pub mod statusline;
 pub mod sync;
 pub mod template;

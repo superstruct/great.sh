@@ -738,6 +738,25 @@ fn apply_no_config_fails() {
         .stderr(predicate::str::contains("great.toml"));
 }
 
+#[test]
+fn apply_dry_run_no_sudo_prompt() {
+    let dir = TempDir::new().unwrap();
+    // Create a minimal great.toml with a runtime declaration
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n\n[tools]\nnode = \"22\"\n",
+    )
+    .unwrap();
+
+    // Run with piped stdin (non-interactive) -- should not hang on sudo
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--dry-run"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success();
+}
+
 // -----------------------------------------------------------------------
 // Statusline
 // -----------------------------------------------------------------------

@@ -396,6 +396,36 @@ pub fn run(args: Args) -> Result<()> {
         println!();
     }
 
+    // 2a. Pre-cache sudo credentials before any installs that need root.
+    // Note: The `needs_sudo` platform check intentionally duplicates the `needs_homebrew`
+    // match at line ~410 because sudo must be cached *before* `ensure_prerequisites()`
+    // (which runs `sudo apt-get`), and `needs_homebrew` is computed after that call.
+    let needs_sudo = !args.dry_run && {
+        let needs_homebrew = match &info.platform {
+            platform::Platform::MacOS { .. } => true,
+            platform::Platform::Linux { distro, .. }
+            | platform::Platform::Wsl { distro, .. } => {
+                matches!(
+                    distro,
+                    platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
+                )
+            }
+            _ => false,
+        };
+        (needs_homebrew && !info.capabilities.has_homebrew)
+            || bootstrap::is_apt_distro(&info.platform)
+    };
+
+    let _sudo_keepalive = if needs_sudo {
+        use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
+        match ensure_sudo_cached(info.is_root) {
+            SudoCacheResult::Cached(keepalive) => Some(keepalive),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
     // 2b. System prerequisites — before Homebrew since Homebrew needs curl/git/build tools.
     bootstrap::ensure_prerequisites(args.dry_run, &info);
 

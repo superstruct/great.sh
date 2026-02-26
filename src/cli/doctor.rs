@@ -95,6 +95,28 @@ pub fn run(args: Args) -> Result<()> {
         println!();
         output::header("Auto-fix");
         let managers = package_manager::available_managers(false);
+
+        // Pre-cache sudo if any fix might need it.
+        let has_sudo_fix = result.fixable.iter().any(|issue| {
+            matches!(
+                issue.action,
+                FixAction::InstallHomebrew
+                    | FixAction::InstallSystemPrerequisite { .. }
+                    | FixAction::InstallDocker
+                    | FixAction::FixInotifyWatches
+            )
+        });
+
+        let _sudo_keepalive = if has_sudo_fix {
+            use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
+            match ensure_sudo_cached(info.is_root) {
+                SudoCacheResult::Cached(keepalive) => Some(keepalive),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         let mut fixed = 0;
 
         for issue in &result.fixable {
