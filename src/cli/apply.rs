@@ -364,6 +364,11 @@ pub struct Args {
     /// Skip confirmation prompts
     #[arg(long, short)]
     pub yes: bool,
+
+    /// Set by main.rs from the global --non-interactive flag.
+    /// Not a CLI argument -- hidden from clap.
+    #[arg(skip)]
+    pub non_interactive: bool,
 }
 
 /// Execute the `great apply` command.
@@ -418,7 +423,7 @@ pub fn run(args: Args) -> Result<()> {
 
     let _sudo_keepalive = if needs_sudo {
         use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
-        match ensure_sudo_cached(info.is_root) {
+        match ensure_sudo_cached(info.is_root, args.non_interactive) {
             SudoCacheResult::Cached(keepalive) => Some(keepalive),
             _ => None,
         }
@@ -569,7 +574,7 @@ pub fn run(args: Args) -> Result<()> {
         if let Some(cli_tools) = &tools.cli {
             if !cli_tools.is_empty() {
                 output::header("CLI Tools");
-                let managers = package_manager::available_managers(false);
+                let managers = package_manager::available_managers(args.non_interactive);
 
                 for (name, version) in cli_tools {
                     // Check binary name — some tools have different binary vs config names
@@ -727,7 +732,7 @@ pub fn run(args: Args) -> Result<()> {
             } else {
                 output::header("Bitwarden CLI");
                 output::info("Secrets provider is bitwarden — installing bw CLI...");
-                let managers = package_manager::available_managers(false);
+                let managers = package_manager::available_managers(args.non_interactive);
                 let spec = tool_install_spec("bw").expect("bw has install spec");
                 match install_with_spec(&spec, &managers, None) {
                     Ok(Some(method)) => {
@@ -800,7 +805,7 @@ pub fn run(args: Args) -> Result<()> {
         if let Some(extra_tools) = override_tools {
             if !extra_tools.is_empty() {
                 output::header("Platform-specific tools");
-                let managers = package_manager::available_managers(false);
+                let managers = package_manager::available_managers(args.non_interactive);
                 for tool in extra_tools {
                     if command_exists(tool) {
                         output::success(&format!("  {} — already installed", tool));

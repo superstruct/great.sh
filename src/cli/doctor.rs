@@ -12,6 +12,11 @@ pub struct Args {
     /// Attempt to fix issues automatically
     #[arg(long)]
     pub fix: bool,
+
+    /// Set by main.rs from the global --non-interactive flag.
+    /// Not a CLI argument -- hidden from clap.
+    #[arg(skip)]
+    pub non_interactive: bool,
 }
 
 #[derive(Default)]
@@ -94,7 +99,7 @@ pub fn run(args: Args) -> Result<()> {
     if args.fix && !result.fixable.is_empty() {
         println!();
         output::header("Auto-fix");
-        let managers = package_manager::available_managers(false);
+        let managers = package_manager::available_managers(args.non_interactive);
 
         // Pre-cache sudo if any fix might need it.
         let has_sudo_fix = result.fixable.iter().any(|issue| {
@@ -109,7 +114,7 @@ pub fn run(args: Args) -> Result<()> {
 
         let _sudo_keepalive = if has_sudo_fix {
             use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
-            match ensure_sudo_cached(info.is_root) {
+            match ensure_sudo_cached(info.is_root, args.non_interactive) {
                 SudoCacheResult::Cached(keepalive) => Some(keepalive),
                 _ => None,
             }

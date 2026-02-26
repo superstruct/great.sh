@@ -58,16 +58,15 @@ pub enum SudoCacheResult {
 /// # Arguments
 ///
 /// * `is_root` - Whether the current user is UID 0 (from `PlatformInfo.is_root`).
-// TODO: Also accept a `non_interactive` parameter from the --non-interactive
-// global CLI flag once it is wired through to apply::run() / doctor::run().
-pub fn ensure_sudo_cached(is_root: bool) -> SudoCacheResult {
+/// * `non_interactive` - Whether the user passed `--non-interactive` on the CLI.
+pub fn ensure_sudo_cached(is_root: bool, non_interactive: bool) -> SudoCacheResult {
     // Already root -- no sudo needed.
     if is_root {
         return SudoCacheResult::AlreadyRoot;
     }
 
     // Non-interactive -- do not prompt; let individual commands fail fast.
-    if !std::io::stdin().is_terminal() {
+    if non_interactive || !std::io::stdin().is_terminal() {
         return SudoCacheResult::NonInteractive;
     }
 
@@ -135,8 +134,14 @@ mod tests {
 
     #[test]
     fn already_root_returns_immediately() {
-        let result = ensure_sudo_cached(true);
+        let result = ensure_sudo_cached(true, false);
         assert!(matches!(result, SudoCacheResult::AlreadyRoot));
+    }
+
+    #[test]
+    fn non_interactive_flag_returns_non_interactive() {
+        let result = ensure_sudo_cached(false, true);
+        assert!(matches!(result, SudoCacheResult::NonInteractive));
     }
 
     #[test]
