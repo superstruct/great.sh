@@ -3,8 +3,8 @@
 **Priority:** P0 (umbrella -- contains P0, P1, and P2 sub-groups)
 **Type:** feature / bugfix / refactor
 **Module:** Multiple -- see groups below
-**Status:** pending
-**Estimated Complexity:** XL (11 groups, ~40 individual work items)
+**Status:** complete — all 11 groups verified done (see Group Completion Status below)
+**Estimated Complexity:** XL (11 groups, ~40 individual work items) — all completed
 
 ## Context
 
@@ -17,6 +17,26 @@ has its own priority, acceptance criteria, and complexity estimate.
 The codebase has progressed well beyond stubs -- `apply`, `status`, `doctor`,
 `diff`, `init`, `mcp`, `vault`, `sync`, and `template` all have substantial
 implementations. What remains is finishing the last-mile gaps in each module.
+
+## Group Completion Status
+
+| Group | Topic | Status | Evidence (codebase verification 2026-02-27) |
+|---|---|---|---|
+| A | Tool Install Mapping | DONE | `apply.rs:272-316` — `tool_install_spec()` covers cdk, az, gcloud, aws, pnpm, uv, starship, bw |
+| B | Starship Configuration | DONE | `apply.rs:851-947` — `configure_starship()` generates config + shell init |
+| C | MCP Add Command | DONE | `mcp.rs:109-164` — `run_add()` uses `toml_edit` to modify great.toml |
+| D | Doctor --fix | DONE | `doctor.rs:52-229` — 8 fix action types, pre-caches sudo |
+| E | Update Command | DONE | `update.rs:1-206` — queries GitHub API, self-replaces binary |
+| F | Vault Completion | DONE | `vault.rs` — login, unlock, set, import all implemented |
+| G | Sync Pull --apply | DONE | `sync.rs:14-131` — `--apply` flag, backup + write |
+| H | Template Update from Registry | DONE | `template.rs:183-277` — fetches from GitHub, downloads to local |
+| I | Dead Code and Safety Cleanup | DONE | iteration-016 commit `9a04955`; `cargo clippy` = 0 warnings |
+| J | Integration Test Coverage | DONE | `tests/cli_smoke.rs` — 90 tests |
+| K | Docker Test Rigs | DONE | `docker-compose.yml` + 9 files in `docker/` |
+
+All 11 groups verified complete via codebase inspection (2026-02-27). GROUP I
+explicitly tracked in iteration 016. Other groups landed across iterations
+003–010. This umbrella task is fully resolved.
 
 ---
 
