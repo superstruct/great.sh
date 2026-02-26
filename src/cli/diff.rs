@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use anyhow::Result;
 use clap::Args as ClapArgs;
 use colored::Colorize;
@@ -54,7 +56,6 @@ pub fn run(args: Args) -> Result<()> {
     let mut has_diff = false;
     let mut install_count: usize = 0;
     let mut configure_count: usize = 0;
-    let mut secrets_count: usize = 0;
 
     // Tools diff
     if let Some(tools) = &cfg.tools {
@@ -140,7 +141,7 @@ pub fn run(args: Args) -> Result<()> {
             // Check if the command for this MCP server exists
             let cmd_available = command_exists(&mcp.command);
             if !cmd_available {
-                configure_count += 1;
+                install_count += 1;
                 mcp_diffs.push(format!(
                     "  {} {} {}",
                     "+".green(),
@@ -167,7 +168,7 @@ pub fn run(args: Args) -> Result<()> {
 
         if !mcp_diffs.is_empty() {
             has_diff = true;
-            output::header("MCP Servers — need configuration:");
+            output::header("MCP Servers");
             for diff in &mcp_diffs {
                 println!("{}", diff);
             }
@@ -175,14 +176,16 @@ pub fn run(args: Args) -> Result<()> {
         }
     }
 
-    // Secrets diff
+    // Secrets diff (unified with deduplication)
+    let mut all_missing_secrets: BTreeSet<String> = BTreeSet::new();
+    let mut secret_diffs: Vec<String> = Vec::new();
+
+    // Phase 1: secrets.required
     if let Some(secrets) = &cfg.secrets {
         if let Some(required) = &secrets.required {
-            let mut secret_diffs = Vec::new();
-
             for key in required {
                 if std::env::var(key).is_err() {
-                    secrets_count += 1;
+                    all_missing_secrets.insert(key.clone());
                     secret_diffs.push(format!(
                         "  {} {} {}",
                         "-".red(),
@@ -191,37 +194,30 @@ pub fn run(args: Args) -> Result<()> {
                     ));
                 }
             }
-
-            if !secret_diffs.is_empty() {
-                has_diff = true;
-                output::header("Secrets — need to set:");
-                for diff in &secret_diffs {
-                    println!("{}", diff);
-                }
-                println!();
-            }
         }
     }
 
-    // Also check for secret references in MCP env
+    // Phase 2: find_secret_refs (MCP env + agent api_key)
     let secret_refs = cfg.find_secret_refs();
-    let mut unresolved_refs = Vec::new();
     for ref_name in &secret_refs {
-        if std::env::var(ref_name).is_err() {
-            unresolved_refs.push(ref_name.clone());
-        }
-    }
-    if !unresolved_refs.is_empty() {
-        has_diff = true;
-        output::header("Secret References — unresolved:");
-        for name in &unresolved_refs {
-            secrets_count += 1;
-            println!(
+        if std::env::var(ref_name).is_err() && !all_missing_secrets.contains(ref_name) {
+            all_missing_secrets.insert(ref_name.clone());
+            secret_diffs.push(format!(
                 "  {} {} {}",
                 "-".red(),
-                name.bold(),
-                "(referenced in MCP env, not set)".dimmed()
-            );
+                ref_name.bold(),
+                "(referenced in config, not set)".dimmed()
+            ));
+        }
+    }
+
+    let secrets_count = all_missing_secrets.len();
+
+    if !secret_diffs.is_empty() {
+        has_diff = true;
+        output::header("Secrets");
+        for diff in &secret_diffs {
+            println!("{}", diff);
         }
         println!();
     }

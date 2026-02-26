@@ -303,6 +303,110 @@ required = ["NONEXISTENT_SECRET_XYZ_88888"]
         .stdout(predicate::str::contains("not set in environment"));
 }
 
+#[test]
+fn diff_mcp_missing_command_counted_as_install() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.fake-server]
+command = "nonexistent_mcp_cmd_xyz_77777"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("1 to install"))
+        .stderr(predicate::str::contains("to configure").not())
+        .stdout(predicate::str::contains("nonexistent_mcp_cmd_xyz_77777"));
+}
+
+#[test]
+fn diff_mcp_missing_command_and_missing_tool_install_count() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent_tool_xyz_66666 = "1.0.0"
+
+[mcp.fake-server]
+command = "nonexistent_mcp_cmd_xyz_66666"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("2 to install"));
+}
+
+#[test]
+fn diff_secret_dedup_required_and_ref() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[secrets]
+required = ["DEDUP_TEST_SECRET_XYZ_55555"]
+
+[mcp.test-server]
+command = "echo"
+env = { KEY = "${DEDUP_TEST_SECRET_XYZ_55555}" }
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("1 secrets to resolve"))
+        .stderr(predicate::str::contains("2 secrets").not());
+}
+
+#[test]
+fn diff_secret_ref_only_no_required_section() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.test-server]
+command = "echo"
+env = { KEY = "${REFONLY_SECRET_XYZ_44444}" }
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("diff")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("1 secrets to resolve"))
+        .stdout(predicate::str::contains("REFONLY_SECRET_XYZ_44444"));
+}
+
 // -----------------------------------------------------------------------
 // Template
 // -----------------------------------------------------------------------
