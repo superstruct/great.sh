@@ -46,8 +46,8 @@ pub fn run(args: Args) -> Result<()> {
     let config_path_str = config_path.to_str().unwrap_or_default();
     let cfg = config::load(Some(config_path_str))?;
 
-    output::header("great diff");
-    output::info(&format!(
+    output::header_stdout("great diff");
+    output::info_stdout(&format!(
         "Comparing {} against system state",
         config_path.display()
     ));
@@ -120,7 +120,7 @@ pub fn run(args: Args) -> Result<()> {
 
         if !tool_diffs.is_empty() {
             has_diff = true;
-            output::header("Tools");
+            output::header_stdout("Tools");
             for diff in &tool_diffs {
                 println!("{}", diff);
             }
@@ -168,7 +168,7 @@ pub fn run(args: Args) -> Result<()> {
 
         if !mcp_diffs.is_empty() {
             has_diff = true;
-            output::header("MCP Servers");
+            output::header_stdout("MCP Servers");
             for diff in &mcp_diffs {
                 println!("{}", diff);
             }
@@ -215,7 +215,7 @@ pub fn run(args: Args) -> Result<()> {
 
     if !secret_diffs.is_empty() {
         has_diff = true;
-        output::header("Secrets");
+        output::header_stdout("Secrets");
         for diff in &secret_diffs {
             println!("{}", diff);
         }
@@ -223,7 +223,7 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     if !has_diff {
-        output::success("Environment matches configuration — nothing to do.");
+        output::success_stdout("Environment matches configuration — nothing to do.");
     } else {
         let mut parts = Vec::new();
         if install_count > 0 {
@@ -236,7 +236,7 @@ pub fn run(args: Args) -> Result<()> {
             parts.push(format!("{} secrets to resolve", secrets_count));
         }
         let summary = parts.join(", ");
-        output::info(&format!("{} — run `great apply` to reconcile.", summary));
+        output::info_stdout(&format!("{} — run `great apply` to reconcile.", summary));
     }
 
     Ok(())

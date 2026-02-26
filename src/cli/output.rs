@@ -25,6 +25,28 @@ pub fn header(msg: &str) {
     eprintln!("{}", msg.bold());
 }
 
+/// Print a bold header/section title to stdout.
+///
+/// Use this in pipeline-oriented commands (e.g., `diff`) where all output
+/// is data and belongs on stdout. Interactive commands should use `header()`.
+pub fn header_stdout(msg: &str) {
+    println!("{}", msg.bold());
+}
+
+/// Print an informational message to stdout with a blue info prefix.
+///
+/// Stdout variant of `info()` for pipeline-oriented commands.
+pub fn info_stdout(msg: &str) {
+    println!("{} {}", "ℹ".blue(), msg);
+}
+
+/// Print a success message to stdout with a green checkmark prefix.
+///
+/// Stdout variant of `success()` for pipeline-oriented commands.
+pub fn success_stdout(msg: &str) {
+    println!("{} {}", "✓".green(), msg);
+}
+
 /// Create a progress spinner with the given message.
 ///
 /// The spinner ticks at 80ms intervals and uses braille-dot characters.

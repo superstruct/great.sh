@@ -151,7 +151,7 @@ git = "latest"
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("nothing to do"));
+        .stdout(predicate::str::contains("nothing to do"));
 }
 
 #[test]
@@ -175,7 +175,7 @@ nonexistent_tool_xyz_88888 = "1.0.0"
         .assert()
         .success()
         .stdout(predicate::str::contains("nonexistent_tool_xyz_88888"))
-        .stderr(predicate::str::contains("great apply"));
+        .stdout(predicate::str::contains("great apply"));
 }
 
 #[test]
@@ -248,7 +248,7 @@ git = "latest"
         .args(["diff", "--config", config_path.to_str().unwrap()])
         .assert()
         .success()
-        .stderr(predicate::str::contains("custom.toml"));
+        .stdout(predicate::str::contains("custom.toml"));
 }
 
 #[test]
@@ -274,9 +274,9 @@ required = ["NONEXISTENT_SECRET_XYZ_99999"]
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("1 to install"))
-        .stderr(predicate::str::contains("1 secrets to resolve"))
-        .stderr(predicate::str::contains("great apply"));
+        .stdout(predicate::str::contains("1 to install"))
+        .stdout(predicate::str::contains("1 secrets to resolve"))
+        .stdout(predicate::str::contains("great apply"));
 }
 
 #[test]
@@ -323,8 +323,8 @@ command = "nonexistent_mcp_cmd_xyz_77777"
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("1 to install"))
-        .stderr(predicate::str::contains("to configure").not())
+        .stdout(predicate::str::contains("1 to install"))
+        .stdout(predicate::str::contains("to configure").not())
         .stdout(predicate::str::contains("nonexistent_mcp_cmd_xyz_77777"));
 }
 
@@ -351,7 +351,7 @@ command = "nonexistent_mcp_cmd_xyz_66666"
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("2 to install"));
+        .stdout(predicate::str::contains("2 to install"));
 }
 
 #[test]
@@ -378,8 +378,8 @@ env = { KEY = "${DEDUP_TEST_SECRET_XYZ_55555}" }
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("1 secrets to resolve"))
-        .stderr(predicate::str::contains("2 secrets").not());
+        .stdout(predicate::str::contains("1 secrets to resolve"))
+        .stdout(predicate::str::contains("2 secrets").not());
 }
 
 #[test]
@@ -403,7 +403,7 @@ env = { KEY = "${REFONLY_SECRET_XYZ_44444}" }
         .arg("diff")
         .assert()
         .success()
-        .stderr(predicate::str::contains("1 secrets to resolve"))
+        .stdout(predicate::str::contains("1 secrets to resolve"))
         .stdout(predicate::str::contains("REFONLY_SECRET_XYZ_44444"));
 }
 
