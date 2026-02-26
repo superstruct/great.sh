@@ -31,7 +31,10 @@ fn main() -> Result<()> {
         Command::Update(args) => cli::update::run(args),
         Command::Diff(args) => cli::diff::run(args),
         Command::Template(args) => cli::template::run(args),
-        Command::Loop(args) => cli::loop_cmd::run(args),
+        Command::Loop(mut args) => {
+            args.non_interactive = non_interactive;
+            cli::loop_cmd::run(args)
+        }
         Command::Statusline(args) => cli::statusline::run(args),
     }
 }

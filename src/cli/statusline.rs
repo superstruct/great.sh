@@ -23,8 +23,8 @@ pub struct SessionInfo {
     pub context_window: Option<u64>,
     #[allow(dead_code)] // Deserialized for forward-compatibility; not rendered.
     pub workspace: Option<String>,
-    // session_id and transcript_path removed -- sensitive, unused by rendering.
-    // serde_json silently drops unknown fields, so no deserialization breakage.
+    /// Session ID used for state file path derivation. Not rendered.
+    pub session_id: Option<String>,
 }
 
 /// The full state file written by hook handlers.
@@ -158,14 +158,41 @@ fn run_inner(args: Args) -> Result<()> {
     // 3. Parse stdin
     let session = parse_stdin();
 
-    // 4. Read agent state
-    let (state, had_parse_error) = read_state(&config.state_file, config.session_timeout_secs);
+    // 4. Derive state file path: session-scoped if session_id present,
+    //    else fall back to config default for backward compatibility.
+    //
+    //    Known limitation: when session_id is absent (e.g., running
+    //    `great statusline` manually outside Claude Code), all concurrent
+    //    invocations fall back to `config.state_file` -- a single shared path.
+    //    Multiple concurrent Claude Code sessions without session_id injection
+    //    would read/write the same file, causing cross-session contamination.
+    //    This is a known limitation of the non-session-scoped fallback and only
+    //    affects manual invocation; normal Claude Code usage always provides
+    //    session_id.
+    let state_file_path = match &session.session_id {
+        Some(sid)
+            if !sid.is_empty()
+                && sid.len() <= 200
+                && sid
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') =>
+        {
+            format!("/tmp/great-loop/{}/state.json", sid)
+        }
+        _ => config.state_file.clone(),
+    };
 
-    // 5. Resolve terminal width
+    // 5. Read agent state
+    let (state, had_parse_error) = read_state(&state_file_path, config.session_timeout_secs);
+
+    // 6. Clean up stale session directories (lightweight, best-effort)
+    cleanup_stale_sessions();
+
+    // 7. Resolve terminal width
     let width = resolve_width(args.width);
     let use_unicode = !args.no_unicode;
 
-    // 6. Render
+    // 8. Render
     let line = render(
         &session,
         &state,
@@ -175,7 +202,7 @@ fn run_inner(args: Args) -> Result<()> {
         had_parse_error,
     );
 
-    // 7. Print exactly one line to stdout
+    // 9. Print exactly one line to stdout
     println!("{}", line);
 
     Ok(())
@@ -261,6 +288,38 @@ fn apply_timeout(agents: &mut [AgentState], timeout_secs: u64) {
             && now.saturating_sub(agent.updated_at) > timeout_secs
         {
             agent.status = AgentStatus::Idle;
+        }
+    }
+}
+
+/// Remove session directories under `/tmp/great-loop/` whose mtime is
+/// older than 24 hours. Best-effort: errors are silently ignored because
+/// this runs on every statusline tick (~300ms) and must never slow it down.
+fn cleanup_stale_sessions() {
+    let base = std::path::Path::new("/tmp/great-loop");
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
+
+    let cutoff = SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(24 * 60 * 60));
+    let Some(cutoff) = cutoff else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Ok(meta) = path.metadata() else {
+            continue;
+        };
+        let Ok(mtime) = meta.modified() else {
+            continue;
+        };
+        if mtime < cutoff {
+            let _ = std::fs::remove_dir_all(&path);
         }
     }
 }
@@ -1363,5 +1422,33 @@ session_timeout_secs = 60
             "context must not leak after ERR:state: {}",
             line
         );
+    }
+
+    #[test]
+    fn test_session_info_with_session_id() {
+        let json = r#"{"session_id":"abc-123","cost_usd":0.5}"#;
+        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.session_id.as_deref(), Some("abc-123"));
+        assert!((info.cost_usd.unwrap() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_session_info_without_session_id() {
+        let json = r#"{"cost_usd":0.5}"#;
+        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        assert!(info.session_id.is_none());
+    }
+
+    #[test]
+    fn test_session_id_path_derivation() {
+        let sid = "test-session-uuid";
+        let path = format!("/tmp/great-loop/{}/state.json", sid);
+        assert_eq!(path, "/tmp/great-loop/test-session-uuid/state.json");
+    }
+
+    #[test]
+    fn test_cleanup_stale_sessions_no_crash_on_missing_dir() {
+        // /tmp/great-loop/ may not exist -- cleanup must not panic
+        cleanup_stale_sessions();
     }
 }

@@ -8,6 +8,10 @@ use crate::cli::output;
 pub struct Args {
     #[command(subcommand)]
     pub command: LoopCommand,
+
+    /// Not a CLI argument -- hidden from clap.
+    #[arg(skip)]
+    pub non_interactive: bool,
 }
 
 /// Subcommands for managing the great.sh Loop agent team.
@@ -135,10 +139,16 @@ const TEAMS_CONFIG: &str = include_str!("../../loop/teams-config.json");
 /// Observer report template embedded at compile time.
 const OBSERVER_TEMPLATE: &str = include_str!("../../loop/observer-template.md");
 
+/// Hook handler script embedded at compile time.
+const HOOK_UPDATE_STATE: &str = include_str!("../../loop/hooks/update-state.sh");
+
 /// Run the `great loop` subcommand.
 pub fn run(args: Args) -> Result<()> {
+    let non_interactive = args.non_interactive;
     match args.command {
-        LoopCommand::Install { project, force } => run_install(project, force),
+        LoopCommand::Install { project, force } => {
+            run_install(project, force, non_interactive)
+        }
         LoopCommand::Status => run_status(),
         LoopCommand::Uninstall => run_uninstall(),
     }
@@ -153,6 +163,50 @@ fn statusline_value() -> serde_json::Value {
         "type": "command",
         "command": "great statusline"
     })
+}
+
+/// Returns the `hooks` JSON object for Claude Code settings.
+///
+/// Each event maps to an array with one matcher object containing
+/// one command hook. The hook runs async (state writes are side-effects
+/// that must not block the agent loop).
+fn hooks_value() -> serde_json::Value {
+    let cmd = "~/.claude/hooks/great-loop/update-state.sh";
+    let hook_entry = |_event: &str| -> serde_json::Value {
+        serde_json::json!([{
+            "matcher": "",
+            "hooks": [{
+                "type": "command",
+                "command": cmd,
+                "async": true
+            }]
+        }])
+    };
+    serde_json::json!({
+        "SubagentStart": hook_entry("SubagentStart"),
+        "SubagentStop": hook_entry("SubagentStop"),
+        "TeammateIdle": hook_entry("TeammateIdle"),
+        "TaskCompleted": hook_entry("TaskCompleted"),
+        "Stop": hook_entry("Stop"),
+        "SessionEnd": hook_entry("SessionEnd")
+    })
+}
+
+/// Check if a hook matcher array entry is a great-loop hook.
+/// Identifies by checking if any hook command contains "great-loop/update-state.sh".
+fn is_great_loop_hook(entry: &serde_json::Value) -> bool {
+    entry
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|hooks| {
+            hooks.iter().any(|hook| {
+                hook.get("command")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c.contains("great-loop/update-state.sh"))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
 }
 
 /// Returns the subset of the 21 managed file paths that already exist on disk.
@@ -185,13 +239,24 @@ fn collect_existing_paths(claude_dir: &std::path::Path) -> Vec<std::path::PathBu
         existing.push(config_path);
     }
 
+    let hook_path = claude_dir
+        .join("hooks")
+        .join("great-loop")
+        .join("update-state.sh");
+    if hook_path.exists() {
+        existing.push(hook_path);
+    }
+
     existing
 }
 
 /// Prompts the user to confirm overwriting existing files, or aborts in non-TTY contexts.
 ///
 /// Returns `Ok(true)` if the user confirms, `Ok(false)` if they decline or stdin is not a TTY.
-fn confirm_overwrite(existing: &[std::path::PathBuf]) -> Result<bool> {
+fn confirm_overwrite(
+    existing: &[std::path::PathBuf],
+    non_interactive: bool,
+) -> Result<bool> {
     use std::io::IsTerminal;
 
     eprintln!();
@@ -209,7 +274,7 @@ fn confirm_overwrite(existing: &[std::path::PathBuf]) -> Result<bool> {
         eprintln!("  {}", display);
     }
 
-    if !std::io::stdin().is_terminal() {
+    if non_interactive || !std::io::stdin().is_terminal() {
         eprintln!();
         output::error("stdin is not a terminal -- cannot prompt for confirmation.");
         output::info("Re-run with --force to overwrite: great loop install --force");
@@ -228,7 +293,7 @@ fn confirm_overwrite(existing: &[std::path::PathBuf]) -> Result<bool> {
 }
 
 /// Install the great.sh Loop agent team to `~/.claude/`.
-fn run_install(project: bool, force: bool) -> Result<()> {
+fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> {
     let home = dirs::home_dir().context("could not determine home directory — is $HOME set?")?;
     let claude_dir = home.join(".claude");
 
@@ -249,7 +314,7 @@ fn run_install(project: bool, force: bool) -> Result<()> {
     // Check for existing files before writing
     let existing = collect_existing_paths(&claude_dir);
     if !existing.is_empty() && !force {
-        let confirmed = confirm_overwrite(&existing)?;
+        let confirmed = confirm_overwrite(&existing, non_interactive)?;
         if !confirmed {
             bail!("aborted: no files were modified");
         }
@@ -287,18 +352,148 @@ fn run_install(project: bool, force: bool) -> Result<()> {
         .context("failed to write teams config to ~/.claude/teams/loop/config.json")?;
     output::success("Agent Teams config -> ~/.claude/teams/loop/");
 
-    // Handle settings.json (non-destructive)
+    // Write hook handler script
+    let hooks_dir = claude_dir.join("hooks").join("great-loop");
+    std::fs::create_dir_all(&hooks_dir)
+        .context("failed to create ~/.claude/hooks/great-loop/ directory")?;
+    let hook_script_path = hooks_dir.join("update-state.sh");
+    std::fs::write(&hook_script_path, HOOK_UPDATE_STATE)
+        .context("failed to write hook script")?;
+
+    // Make executable (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&hook_script_path)
+            .context("failed to read hook script metadata")?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&hook_script_path, perms)
+            .context("failed to set hook script permissions")?;
+    }
+    output::success("Hook handler -> ~/.claude/hooks/great-loop/update-state.sh");
+
+    // Handle settings.json (non-destructive merge for all keys)
     let settings_path = claude_dir.join("settings.json");
-    if settings_path.exists() {
+
+    // Guard: skip settings.json injection if the file is read-only
+    let settings_readonly = settings_path.exists()
+        && std::fs::metadata(&settings_path)
+            .map(|m| m.permissions().readonly())
+            .unwrap_or(false);
+    if settings_readonly {
+        println!();
+        output::warning(
+            "settings.json is read-only \u{2014} hooks and statusLine not injected.",
+        );
+        output::info(
+            "  Fix: chmod u+w ~/.claude/settings.json && great loop install --force",
+        );
+    } else if settings_path.exists() {
         let contents = std::fs::read_to_string(&settings_path)
             .context("failed to read ~/.claude/settings.json")?;
-        if !contents.contains("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") {
-            println!();
-            output::warning("Add to your ~/.claude/settings.json:");
-            output::info("  \"env\": { \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\" }");
+        match serde_json::from_str::<serde_json::Value>(&contents) {
+            Ok(mut val) => {
+                if let Some(obj) = val.as_object_mut() {
+                    let mut modified = false;
+
+                    // --- Inject env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS ---
+                    let env_obj = obj
+                        .entry("env")
+                        .or_insert_with(|| serde_json::json!({}));
+                    if let Some(env_map) = env_obj.as_object_mut() {
+                        if !env_map.contains_key("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") {
+                            env_map.insert(
+                                "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS".to_string(),
+                                serde_json::json!("1"),
+                            );
+                            modified = true;
+                        }
+                    }
+
+                    // --- Inject or merge hooks ---
+                    let desired_hooks = hooks_value();
+                    let hooks_obj = obj
+                        .entry("hooks")
+                        .or_insert_with(|| serde_json::json!({}));
+                    if let Some(hooks_map) = hooks_obj.as_object_mut() {
+                        // Snapshot for idempotency check
+                        let hooks_before =
+                            serde_json::to_string(hooks_map).unwrap_or_default();
+
+                        if let Some(desired_map) = desired_hooks.as_object() {
+                            for (event_name, desired_matchers) in desired_map {
+                                if let Some(existing_arr) = hooks_map
+                                    .get_mut(event_name)
+                                    .and_then(|v| v.as_array_mut())
+                                {
+                                    // Remove any existing great-loop entries (dedup)
+                                    existing_arr
+                                        .retain(|entry| !is_great_loop_hook(entry));
+                                    // Append the great-loop entries
+                                    if let Some(new_entries) = desired_matchers.as_array()
+                                    {
+                                        existing_arr
+                                            .extend(new_entries.iter().cloned());
+                                    }
+                                } else {
+                                    // Event key does not exist yet -- insert
+                                    hooks_map.insert(
+                                        event_name.clone(),
+                                        desired_matchers.clone(),
+                                    );
+                                }
+                            }
+                        }
+
+                        // Only mark modified if hooks actually changed
+                        let hooks_after =
+                            serde_json::to_string(hooks_map).unwrap_or_default();
+                        if hooks_before != hooks_after {
+                            modified = true;
+                        }
+                    }
+
+                    // --- Inject or repair statusLine ---
+                    let needs_statusline = if !obj.contains_key("statusLine") {
+                        true
+                    } else if let Some(sl) =
+                        obj.get("statusLine").and_then(|v| v.as_object())
+                    {
+                        !sl.contains_key("type")
+                    } else {
+                        false
+                    };
+                    if needs_statusline {
+                        obj.insert("statusLine".to_string(), statusline_value());
+                        modified = true;
+                    }
+
+                    // --- Write back if anything changed ---
+                    if modified {
+                        let formatted = serde_json::to_string_pretty(&val)
+                            .context("failed to serialize settings.json")?;
+                        std::fs::write(&settings_path, formatted)
+                            .context("failed to write ~/.claude/settings.json")?;
+                        output::success(
+                            "Settings updated (env, hooks, statusLine) in ~/.claude/settings.json",
+                        );
+                    } else {
+                        output::success(
+                            "Settings already configured in ~/.claude/settings.json",
+                        );
+                    }
+                }
+            }
+            Err(_) => {
+                output::warning(
+                    "settings.json is not valid JSON; skipping injection",
+                );
+            }
         }
     } else {
-        let default_settings = serde_json::json!({
+        // No existing settings.json -- create with all managed keys
+        let mut default_settings = serde_json::json!({
             "env": {
                 "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
             },
@@ -316,49 +511,17 @@ fn run_install(project: bool, force: bool) -> Result<()> {
             },
             "statusLine": statusline_value()
         });
+        // Merge hooks into the default settings
+        if let Some(obj) = default_settings.as_object_mut() {
+            obj.insert("hooks".to_string(), hooks_value());
+        }
         let formatted = serde_json::to_string_pretty(&default_settings)
             .context("failed to serialize default settings")?;
         std::fs::write(&settings_path, formatted)
             .context("failed to write ~/.claude/settings.json")?;
-        output::success("Settings with Agent Teams enabled -> ~/.claude/settings.json");
-    }
-
-    // Inject or repair statusLine in existing settings.json
-    if settings_path.exists() {
-        let contents = std::fs::read_to_string(&settings_path)
-            .context("failed to read ~/.claude/settings.json for statusLine injection")?;
-        match serde_json::from_str::<serde_json::Value>(&contents) {
-            Ok(mut val) => {
-                if let Some(obj) = val.as_object_mut() {
-                    let needs_write = if !obj.contains_key("statusLine") {
-                        // statusLine key missing entirely -- inject it
-                        obj.insert("statusLine".to_string(), statusline_value());
-                        true
-                    } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
-                        // statusLine exists but may be missing "type" field
-                        if !sl.contains_key("type") {
-                            obj.insert("statusLine".to_string(), statusline_value());
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-
-                    if needs_write {
-                        let formatted = serde_json::to_string_pretty(&val)
-                            .context("failed to serialize settings.json")?;
-                        std::fs::write(&settings_path, formatted)
-                            .context("failed to write ~/.claude/settings.json")?;
-                        output::success("Statusline registered in ~/.claude/settings.json");
-                    }
-                }
-            }
-            Err(_) => {
-                output::warning("settings.json is not valid JSON; skipping statusLine injection");
-            }
-        }
+        output::success(
+            "Settings with Agent Teams, hooks, and statusLine -> ~/.claude/settings.json",
+        );
     }
 
     // Project working state
@@ -468,6 +631,37 @@ fn run_status() -> Result<()> {
         output::warning("settings.json: not found");
     }
 
+    // Check for hook handler script
+    let hook_script = claude_dir
+        .join("hooks")
+        .join("great-loop")
+        .join("update-state.sh");
+    if hook_script.exists() {
+        output::success("Hook handler: installed");
+    } else {
+        output::warning("Hook handler: not installed (statusline will show 'idle')");
+    }
+
+    // Check for hooks in settings.json
+    if settings_path.exists() {
+        let contents = std::fs::read_to_string(&settings_path).unwrap_or_default();
+        if contents.contains("great-loop/update-state.sh") {
+            output::success("Hooks config: registered in settings.json");
+        } else {
+            output::warning("Hooks config: not found in settings.json");
+        }
+    }
+
+    // Check for jq (required by hook script)
+    match std::process::Command::new("jq").arg("--version").output() {
+        Ok(output_result) if output_result.status.success() => {
+            output::success("jq: available");
+        }
+        _ => {
+            output::warning("jq: not found (required for statusline hook handler)");
+        }
+    }
+
     // Check project state
     println!();
     let tasks_exists = std::path::Path::new(".tasks").exists();
@@ -529,6 +723,14 @@ fn run_uninstall() -> Result<()> {
     if teams_dir.exists() {
         std::fs::remove_dir_all(&teams_dir).context("failed to remove ~/.claude/teams/loop/")?;
         output::success("Removed teams/loop/ directory");
+    }
+
+    // Remove hook handler directory
+    let hooks_dir = claude_dir.join("hooks").join("great-loop");
+    if hooks_dir.exists() {
+        std::fs::remove_dir_all(&hooks_dir)
+            .context("failed to remove ~/.claude/hooks/great-loop/")?;
+        output::success("Removed hooks/great-loop/ directory");
     }
 
     println!();
@@ -801,11 +1003,16 @@ mod tests {
         }
         std::fs::write(teams_dir.join("config.json"), "{}").unwrap();
 
+        // Create hook script path so collect_existing_paths detects it
+        let hooks_dir = claude_dir.join("hooks").join("great-loop");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::write(hooks_dir.join("update-state.sh"), "test").unwrap();
+
         let existing = super::collect_existing_paths(&claude_dir);
         assert_eq!(
             existing.len(),
-            21,
-            "full install should detect all 21 managed files, got {}",
+            22,
+            "full install should detect all 22 managed files, got {}",
             existing.len()
         );
     }
@@ -866,5 +1073,138 @@ mod tests {
             }
             _ => panic!("expected Install variant"),
         }
+    }
+
+    #[test]
+    fn test_hooks_value_has_all_events() {
+        let hooks = super::hooks_value();
+        let obj = hooks.as_object().expect("hooks_value must be an object");
+        let expected = [
+            "SubagentStart",
+            "SubagentStop",
+            "TeammateIdle",
+            "TaskCompleted",
+            "Stop",
+            "SessionEnd",
+        ];
+        for event in &expected {
+            assert!(obj.contains_key(*event), "missing event: {}", event);
+            let arr = obj[*event].as_array().expect("event value must be array");
+            assert!(!arr.is_empty(), "event {} must have entries", event);
+        }
+    }
+
+    #[test]
+    fn test_hooks_value_entries_have_async() {
+        let hooks = super::hooks_value();
+        for (event, matchers) in hooks.as_object().unwrap() {
+            for matcher in matchers.as_array().unwrap() {
+                for hook in matcher["hooks"].as_array().unwrap() {
+                    assert_eq!(
+                        hook["async"].as_bool(),
+                        Some(true),
+                        "hook for {} must be async",
+                        event
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_great_loop_hook_positive() {
+        let entry = serde_json::json!({
+            "matcher": "",
+            "hooks": [{"type": "command", "command": "~/.claude/hooks/great-loop/update-state.sh"}]
+        });
+        assert!(super::is_great_loop_hook(&entry));
+    }
+
+    #[test]
+    fn test_is_great_loop_hook_negative() {
+        let entry = serde_json::json!({
+            "matcher": "",
+            "hooks": [{"type": "command", "command": "/usr/local/bin/my-hook.sh"}]
+        });
+        assert!(!super::is_great_loop_hook(&entry));
+    }
+
+    #[test]
+    fn test_settings_merge_idempotent() {
+        // Simulate a settings.json that already has great-loop hooks
+        let mut settings = serde_json::json!({
+            "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" },
+            "hooks": super::hooks_value(),
+            "statusLine": super::statusline_value(),
+            "alwaysThinkingEnabled": true
+        });
+
+        let before = serde_json::to_string_pretty(&settings).unwrap();
+
+        // Simulate the merge logic
+        let desired = super::hooks_value();
+        if let Some(hooks_map) = settings["hooks"].as_object_mut() {
+            if let Some(desired_map) = desired.as_object() {
+                for (event, desired_matchers) in desired_map {
+                    if let Some(arr) =
+                        hooks_map.get_mut(event).and_then(|v| v.as_array_mut())
+                    {
+                        arr.retain(|e| !super::is_great_loop_hook(e));
+                        if let Some(new) = desired_matchers.as_array() {
+                            arr.extend(new.iter().cloned());
+                        }
+                    }
+                }
+            }
+        }
+
+        let after = serde_json::to_string_pretty(&settings).unwrap();
+        assert_eq!(before, after, "merge must be idempotent");
+    }
+
+    #[test]
+    fn test_settings_merge_preserves_user_hooks() {
+        let mut settings = serde_json::json!({
+            "hooks": {
+                "SubagentStart": [
+                    {
+                        "matcher": "",
+                        "hooks": [{"type": "command", "command": "/usr/local/bin/user-hook.sh"}]
+                    }
+                ]
+            }
+        });
+
+        let desired = super::hooks_value();
+        if let Some(hooks_map) = settings["hooks"].as_object_mut() {
+            if let Some(desired_map) = desired.as_object() {
+                for (event, desired_matchers) in desired_map {
+                    if let Some(arr) =
+                        hooks_map.get_mut(event).and_then(|v| v.as_array_mut())
+                    {
+                        arr.retain(|e| !super::is_great_loop_hook(e));
+                        if let Some(new) = desired_matchers.as_array() {
+                            arr.extend(new.iter().cloned());
+                        }
+                    } else {
+                        hooks_map.insert(event.clone(), desired_matchers.clone());
+                    }
+                }
+            }
+        }
+
+        // User hook must still be present
+        let sa = settings["hooks"]["SubagentStart"]
+            .as_array()
+            .unwrap();
+        assert_eq!(sa.len(), 2, "user hook + great-loop hook");
+        assert!(sa[0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("user-hook.sh"));
+        assert!(sa[1]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("great-loop"));
     }
 }
