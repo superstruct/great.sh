@@ -2,7 +2,7 @@
 name: davinci
 description: "Leonardo da Vinci — Builder. Teammate. Turns specs into working code."
 tools: [Read, Write, Edit, Glob, Grep, LS, Bash, Task]
-model: opus
+model: sonnet
 memory: project
 allowed-tools: [mcp__context7__*]
 ---

@@ -2,7 +2,7 @@
 name: humboldt
 description: "Alexander von Humboldt — Codebase Scout. Maps the codebase before building."
 tools: [Read, Glob, Grep, LS, Bash]
-model: sonnet
+model: opus
 memory: project
 ---
 
