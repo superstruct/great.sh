@@ -8,7 +8,8 @@ use rmcp::model::*;
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{tool, tool_router, ErrorData as McpError, ServerHandler, ServiceExt};
 
-use super::backends::BackendConfig;
+use super::backends::{BackendConfig, CommandSpec};
+use super::parsers::{parse_output, ParsedOutput};
 use super::registry::TaskRegistry;
 use super::tools::*;
 
@@ -61,17 +62,28 @@ impl GreatBridge {
     #[tool(description = "Send a prompt to an AI backend and get a synchronous response")]
     async fn prompt(&self, params: Parameters<PromptParams>) -> Result<CallToolResult, McpError> {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
-        let (binary, args) = super::backends::build_command_args(
+        let cmd_spec = super::backends::build_command_args(
             backend,
             &params.0.prompt,
             params.0.model.as_deref(),
             None,
             self.auto_approve,
+            params.0.session_id.as_deref(),
         );
 
-        match self.run_sync(&binary, &args).await {
-            Ok(output) => {
-                let text = truncate_output(&output);
+        match self.run_sync(backend.name, &cmd_spec).await {
+            Ok(parsed) => {
+                let response = if parsed.session_id.is_some() || parsed.is_structured {
+                    serde_json::to_string(&serde_json::json!({
+                        "result": parsed.result,
+                        "session_id": parsed.session_id,
+                        "is_structured": parsed.is_structured,
+                    }))
+                    .unwrap_or_else(|_| parsed.result.clone())
+                } else {
+                    parsed.result.clone()
+                };
+                let text = truncate_output(&response);
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
@@ -87,9 +99,24 @@ impl GreatBridge {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
         let timeout = params.0.timeout_secs.map(Duration::from_secs);
 
+        // Validate work_dir against allowed_dirs if configured
+        if let Some(ref dir) = params.0.work_dir {
+            if let Err(e) = self.validate_path(dir) {
+                return Ok(CallToolResult::error(vec![Content::text(e)]));
+            }
+        }
+
         match self
             .registry
-            .spawn_task(backend, &params.0.prompt, timeout, None, None)
+            .spawn_task(
+                backend,
+                &params.0.prompt,
+                timeout,
+                None,
+                None,
+                params.0.session_id.as_deref(),
+                params.0.work_dir.as_deref(),
+            )
             .await
         {
             Ok(task_id) => {
@@ -127,9 +154,15 @@ impl GreatBridge {
         &self,
         params: Parameters<GetResultParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.registry.get_task(&params.0.task_id).await {
-            Some(snapshot) => {
-                let json = serde_json::to_string(&snapshot).unwrap_or_else(|_| "{}".to_string());
+        let verbose = params.0.verbose.unwrap_or(false);
+        match self
+            .registry
+            .get_task_with_parsed(&params.0.task_id, verbose)
+            .await
+        {
+            Some(json_val) => {
+                let json =
+                    serde_json::to_string(&json_val).unwrap_or_else(|_| "{}".to_string());
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
             None => Ok(CallToolResult::error(vec![Content::text(format!(
@@ -148,6 +181,21 @@ impl GreatBridge {
             Ok(()) => Ok(CallToolResult::success(vec![Content::text("killed")])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
         }
+    }
+
+    #[tool(
+        description = "Remove completed/failed/killed tasks from memory. Returns count of removed tasks."
+    )]
+    async fn cleanup_tasks(
+        &self,
+        params: Parameters<CleanupTasksParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let force = params.0.force.unwrap_or(false);
+        let removed = self.registry.cleanup(force).await;
+        let json = serde_json::json!({"removed": removed});
+        Ok(CallToolResult::success(vec![Content::text(
+            json.to_string(),
+        )]))
     }
 
     // -- research group ---------------------------------------------------
@@ -188,17 +236,18 @@ impl GreatBridge {
         }
         composite_prompt.push_str(&params.0.query);
 
-        let (binary, args) = super::backends::build_command_args(
+        let cmd_spec = super::backends::build_command_args(
             backend,
             &composite_prompt,
             params.0.model.as_deref(),
             None,
             self.auto_approve,
+            None,
         );
 
-        match self.run_sync(&binary, &args).await {
-            Ok(output) => {
-                let text = truncate_output(&output);
+        match self.run_sync(backend.name, &cmd_spec).await {
+            Ok(parsed) => {
+                let text = truncate_output(&parsed.result);
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
@@ -236,17 +285,18 @@ impl GreatBridge {
 
         let prompt = format!("{}{}", params.0.analysis_type.instruction_prefix(), code);
 
-        let (binary, args) = super::backends::build_command_args(
+        let cmd_spec = super::backends::build_command_args(
             backend,
             &prompt,
             params.0.model.as_deref(),
             None,
             self.auto_approve,
+            None,
         );
 
-        match self.run_sync(&binary, &args).await {
-            Ok(output) => {
-                let text = truncate_output(&output);
+        match self.run_sync(backend.name, &cmd_spec).await {
+            Ok(parsed) => {
+                let text = truncate_output(&parsed.result);
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
@@ -261,6 +311,13 @@ impl GreatBridge {
     async fn clink(&self, params: Parameters<ClinkParams>) -> Result<CallToolResult, McpError> {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
 
+        // Validate work_dir against allowed_dirs if configured
+        if let Some(ref dir) = params.0.work_dir {
+            if let Err(e) = self.validate_path(dir) {
+                return Ok(CallToolResult::error(vec![Content::text(e)]));
+            }
+        }
+
         match self
             .registry
             .spawn_task(
@@ -269,6 +326,8 @@ impl GreatBridge {
                 None,
                 params.0.model.as_deref(),
                 Some(&params.0.system_prompt),
+                params.0.session_id.as_deref(),
+                params.0.work_dir.as_deref(),
             )
             .await
         {
@@ -407,31 +466,56 @@ impl GreatBridge {
     }
 
     /// Execute a backend command synchronously (with timeout).
-    async fn run_sync(&self, binary: &str, args: &[String]) -> Result<String, String> {
-        let mut cmd = tokio::process::Command::new(binary);
-        cmd.args(args)
-            .stdin(std::process::Stdio::null())
+    ///
+    /// Parses structured output from the backend when available. On non-zero
+    /// exit codes, parsing still runs so partial results are preserved.
+    async fn run_sync(
+        &self,
+        backend_name: &str,
+        cmd_spec: &CommandSpec,
+    ) -> Result<ParsedOutput, String> {
+        let mut cmd = tokio::process::Command::new(&cmd_spec.binary);
+        cmd.args(&cmd_spec.args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
 
-        let child = cmd.spawn().map_err(|e| format!("spawn failed: {}", e))?;
+        // Use piped stdin when prompt is delivered via stdin, else null
+        if cmd_spec.stdin_prompt.is_some() {
+            cmd.stdin(std::process::Stdio::piped());
+        } else {
+            cmd.stdin(std::process::Stdio::null());
+        }
+
+        let mut child = cmd.spawn().map_err(|e| format!("spawn failed: {}", e))?;
+
+        // Write prompt via stdin if needed, then close
+        if let Some(ref prompt) = cmd_spec.stdin_prompt {
+            if let Some(mut stdin) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                let _ = stdin.write_all(prompt.as_bytes()).await;
+                let _ = stdin.shutdown().await;
+            }
+        }
 
         let timeout = self.registry.default_timeout;
         match tokio::time::timeout(timeout, child.wait_with_output()).await {
             Ok(Ok(output)) => {
-                if output.status.success() {
-                    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-                } else {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    Err(format!(
-                        "exit code {}: {}\n{}",
-                        output.status.code().unwrap_or(-1),
-                        stdout,
-                        stderr,
-                    ))
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+                // Parse output even on non-zero exits (backends produce valid partial output)
+                let mut parsed = parse_output(backend_name, &stdout);
+
+                if !output.status.success() {
+                    let exit_code = output.status.code().unwrap_or(-1);
+                    parsed.result = format!(
+                        "[exit code {}] {}\n{}",
+                        exit_code, parsed.result, stderr
+                    );
                 }
+
+                Ok(parsed)
             }
             Ok(Err(e)) => Err(format!("process error: {}", e)),
             Err(_) => Err(format!("timeout after {}s", timeout.as_secs())),

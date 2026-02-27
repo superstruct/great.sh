@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use super::backends::{build_command_args, BackendConfig};
+use super::parsers::{parse_output, ParsedOutput};
 
 /// The lifecycle state of a background task.
 #[derive(Debug, Clone)]
@@ -20,6 +21,7 @@ pub enum TaskState {
         stdout: String,
         stderr: String,
         duration: Duration,
+        parsed: Option<ParsedOutput>,
     },
     Failed {
         error: String,
@@ -45,6 +47,9 @@ pub struct TaskSnapshot {
     pub stdout: Option<String>,
     pub stderr: Option<String>,
     pub duration_ms: Option<u64>,
+    /// Backend session/thread ID for multi-turn continuation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 /// Internal task handle stored in the registry.
@@ -66,6 +71,8 @@ pub struct TaskRegistry {
     tasks: Arc<Mutex<HashMap<String, TaskHandle>>>,
     pub default_timeout: Duration,
     pub auto_approve: bool,
+    /// How long to keep terminal-state tasks before cleanup (default: 30 min).
+    pub cleanup_ttl: Duration,
 }
 
 impl TaskRegistry {
@@ -74,7 +81,14 @@ impl TaskRegistry {
             tasks: Arc::new(Mutex::new(HashMap::new())),
             default_timeout: Duration::from_secs(timeout_secs),
             auto_approve,
+            cleanup_ttl: Duration::from_secs(30 * 60),
         }
+    }
+
+    /// Create a registry with a custom cleanup TTL.
+    pub fn with_cleanup_ttl(mut self, ttl: Duration) -> Self {
+        self.cleanup_ttl = ttl;
+        self
     }
 
     /// Spawn a backend CLI process asynchronously. Returns the task ID.
@@ -82,6 +96,7 @@ impl TaskRegistry {
     /// The process is spawned with `kill_on_drop(true)` so that dropping the
     /// child handle kills the process. A background tokio task collects the
     /// output and updates the registry.
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn_task(
         &self,
         backend: &BackendConfig,
@@ -89,24 +104,38 @@ impl TaskRegistry {
         timeout_override: Option<Duration>,
         model_override: Option<&str>,
         system_prompt: Option<&str>,
+        session_id: Option<&str>,
+        work_dir: Option<&str>,
     ) -> anyhow::Result<String> {
         let task_id = Uuid::new_v4().to_string();
         let timeout = timeout_override.unwrap_or(self.default_timeout);
 
-        let (binary, args) = build_command_args(
+        let cmd_spec = build_command_args(
             backend,
             prompt,
             model_override,
             system_prompt,
             self.auto_approve,
+            session_id,
         );
 
-        let mut cmd = Command::new(&binary);
-        cmd.args(&args)
-            .stdin(std::process::Stdio::null())
+        let mut cmd = Command::new(&cmd_spec.binary);
+        cmd.args(&cmd_spec.args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
+
+        // Use piped stdin when prompt is delivered via stdin, else null
+        if cmd_spec.stdin_prompt.is_some() {
+            cmd.stdin(std::process::Stdio::piped());
+        } else {
+            cmd.stdin(std::process::Stdio::null());
+        }
+
+        // Set working directory if specified
+        if let Some(dir) = work_dir {
+            cmd.current_dir(dir);
+        }
 
         // Create new process group on Unix so we can kill the tree
         #[cfg(unix)]
@@ -124,9 +153,26 @@ impl TaskRegistry {
             }
         }
 
-        let child = cmd
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("failed to spawn {} ({}): {}", backend.name, binary, e))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            anyhow::anyhow!(
+                "failed to spawn {} ({}): {}",
+                backend.name,
+                cmd_spec.binary,
+                e
+            )
+        })?;
+
+        // Write prompt via stdin if needed, then close
+        if let Some(ref prompt_text) = cmd_spec.stdin_prompt {
+            if let Some(mut stdin) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                let bytes = prompt_text.as_bytes().to_vec();
+                tokio::spawn(async move {
+                    let _ = stdin.write_all(&bytes).await;
+                    let _ = stdin.shutdown().await;
+                });
+            }
+        }
 
         let pid = child.id().unwrap_or(0);
 
@@ -149,6 +195,7 @@ impl TaskRegistry {
         // Background task to collect output
         let tasks_ref = self.tasks.clone();
         let tid = task_id.clone();
+        let backend_name = backend.name.to_string();
         tokio::spawn(async move {
             let start = Instant::now();
             let result = tokio::time::timeout(timeout, child.wait_with_output()).await;
@@ -159,11 +206,13 @@ impl TaskRegistry {
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     let exit_code = output.status.code().unwrap_or(-1);
+                    let parsed = parse_output(&backend_name, &stdout);
                     TaskState::Completed {
                         exit_code,
                         stdout,
                         stderr,
                         duration,
+                        parsed: Some(parsed),
                     }
                 }
                 Ok(Err(e)) => TaskState::Failed {
@@ -187,20 +236,74 @@ impl TaskRegistry {
     }
 
     /// Get a snapshot of a task's current state.
+    #[allow(dead_code)] // Public API for external callers; server uses get_task_with_parsed.
     pub async fn get_task(&self, task_id: &str) -> Option<TaskSnapshot> {
         let tasks = self.tasks.lock().await;
         tasks.get(task_id).map(|h| self.snapshot(h))
+    }
+
+    /// Get task result as JSON, optionally including verbose parsed output
+    /// (tool usage history, token counts).
+    pub async fn get_task_with_parsed(
+        &self,
+        task_id: &str,
+        verbose: bool,
+    ) -> Option<serde_json::Value> {
+        let tasks = self.tasks.lock().await;
+        let handle = tasks.get(task_id)?;
+        let snapshot = self.snapshot(handle);
+        let mut json = serde_json::to_value(&snapshot).ok()?;
+
+        if verbose {
+            if let TaskState::Completed {
+                parsed: Some(ref p),
+                ..
+            } = &handle.state
+            {
+                if let Some(ref usage) = p.usage {
+                    json["usage"] = serde_json::to_value(usage).unwrap_or_default();
+                }
+                if !p.tool_usage.is_empty() {
+                    json["tool_usage"] =
+                        serde_json::to_value(&p.tool_usage).unwrap_or_default();
+                }
+            }
+        }
+
+        Some(json)
     }
 
     /// List all tasks (triggers cleanup of old completed tasks).
     pub async fn list_tasks(&self) -> Vec<TaskSnapshot> {
         let mut tasks = self.tasks.lock().await;
 
-        // Cleanup terminal-state tasks older than 30 minutes
-        let cutoff = Instant::now() - Duration::from_secs(30 * 60);
+        // Cleanup terminal-state tasks older than the configured TTL
+        let cutoff = Instant::now() - self.cleanup_ttl;
         tasks.retain(|_, h| h.completed_at.is_none_or(|t| t > cutoff));
 
         tasks.values().map(|h| self.snapshot(h)).collect()
+    }
+
+    /// Remove terminal-state tasks from the registry.
+    ///
+    /// When `force` is true, removes all terminal tasks regardless of age.
+    /// When false, only removes tasks older than the cleanup TTL.
+    /// Returns the number of tasks removed.
+    pub async fn cleanup(&self, force: bool) -> usize {
+        let mut tasks = self.tasks.lock().await;
+        let before = tasks.len();
+        let cutoff = Instant::now() - self.cleanup_ttl;
+        tasks.retain(|_, h| {
+            if h.completed_at.is_none() {
+                return true; // keep running tasks
+            }
+            if force {
+                return false; // remove all terminal
+            }
+            // keep if not yet past TTL
+            h.completed_at.is_some_and(|t| t > cutoff)
+        });
+        before - tasks.len()
     }
 
     /// Kill a running task.
@@ -288,27 +391,40 @@ impl TaskRegistry {
     }
 
     fn snapshot(&self, handle: &TaskHandle) -> TaskSnapshot {
-        let (status, exit_code, stdout, stderr, duration_ms) = match &handle.state {
-            TaskState::Running { .. } => ("running".to_string(), None, None, None, None),
+        let (status, exit_code, stdout, stderr, duration_ms, session_id) = match &handle.state {
+            TaskState::Running { .. } => {
+                ("running".to_string(), None, None, None, None, None)
+            }
             TaskState::Completed {
                 exit_code,
                 stdout,
                 stderr,
                 duration,
-                ..
-            } => (
-                "completed".to_string(),
-                Some(*exit_code),
-                Some(stdout.clone()),
-                Some(stderr.clone()),
-                Some(duration.as_millis() as u64),
-            ),
+                parsed,
+            } => {
+                let sid = parsed.as_ref().and_then(|p| p.session_id.clone());
+                // Use parsed result text when available, fall back to raw stdout
+                let display_stdout = parsed
+                    .as_ref()
+                    .filter(|p| p.is_structured)
+                    .map(|p| p.result.clone())
+                    .unwrap_or_else(|| stdout.clone());
+                (
+                    "completed".to_string(),
+                    Some(*exit_code),
+                    Some(display_stdout),
+                    Some(stderr.clone()),
+                    Some(duration.as_millis() as u64),
+                    sid,
+                )
+            }
             TaskState::Failed { error, duration } => (
                 format!("failed: {}", error),
                 None,
                 None,
                 Some(error.clone()),
                 Some(duration.as_millis() as u64),
+                None,
             ),
             TaskState::TimedOut { duration } => (
                 "timed_out".to_string(),
@@ -316,8 +432,9 @@ impl TaskRegistry {
                 None,
                 None,
                 Some(duration.as_millis() as u64),
+                None,
             ),
-            TaskState::Killed => ("killed".to_string(), None, None, None, None),
+            TaskState::Killed => ("killed".to_string(), None, None, None, None, None),
         };
 
         TaskSnapshot {
@@ -333,6 +450,7 @@ impl TaskRegistry {
             stdout,
             stderr,
             duration_ms,
+            session_id,
         }
     }
 }
@@ -360,10 +478,31 @@ mod tests {
             stdout: None,
             stderr: None,
             duration_ms: None,
+            session_id: None,
         };
         let json = serde_json::to_string(&snapshot);
         assert!(json.is_ok());
         let json_str = json.expect("serialization should succeed");
         assert!(json_str.contains("test-id"));
+        // session_id should be omitted when None
+        assert!(!json_str.contains("session_id"));
+    }
+
+    #[test]
+    fn test_snapshot_with_session_id() {
+        let snapshot = TaskSnapshot {
+            task_id: "test-id".to_string(),
+            backend: "claude".to_string(),
+            status: "completed".to_string(),
+            prompt_preview: "hello".to_string(),
+            started_at: None,
+            exit_code: Some(0),
+            stdout: Some("result".to_string()),
+            stderr: None,
+            duration_ms: Some(1000),
+            session_id: Some("sess-abc-123".to_string()),
+        };
+        let json_str = serde_json::to_string(&snapshot).unwrap();
+        assert!(json_str.contains("sess-abc-123"));
     }
 }
