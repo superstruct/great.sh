@@ -14,6 +14,9 @@ pub struct PromptParams {
     /// Optional model override.
     #[serde(default)]
     pub model: Option<String>,
+    /// Session ID to resume a previous conversation (claude, codex only).
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 /// Parameters for the `run` tool (async task spawn).
@@ -27,6 +30,12 @@ pub struct RunParams {
     /// Override per-task timeout in seconds.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
+    /// Session ID to resume a previous conversation (claude, codex only).
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Working directory for the backend process.
+    #[serde(default)]
+    pub work_dir: Option<String>,
 }
 
 /// Parameters for the `wait` tool (block until tasks complete).
@@ -44,6 +53,9 @@ pub struct WaitParams {
 pub struct GetResultParams {
     /// Task ID to retrieve results for.
     pub task_id: String,
+    /// When true, include full tool usage history and token counts in the response.
+    #[serde(default)]
+    pub verbose: Option<bool>,
 }
 
 /// Parameters for the `kill_task` tool.
@@ -121,6 +133,21 @@ pub struct ClinkParams {
     /// Optional model override.
     #[serde(default)]
     pub model: Option<String>,
+    /// Session ID to resume a previous conversation (claude, codex only).
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Working directory for the backend process.
+    #[serde(default)]
+    pub work_dir: Option<String>,
+}
+
+/// Parameters for the `cleanup_tasks` tool.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CleanupTasksParams {
+    /// When true, removes all terminal-state tasks regardless of age.
+    /// Default (false): only removes tasks older than the cleanup TTL.
+    #[serde(default)]
+    pub force: Option<bool>,
 }
 
 // -- Preset system --------------------------------------------------------
@@ -160,6 +187,7 @@ impl Preset {
                 "list_tasks",
                 "get_result",
                 "kill_task",
+                "cleanup_tasks",
             ],
             Self::Research => vec![
                 "prompt",
@@ -168,6 +196,7 @@ impl Preset {
                 "list_tasks",
                 "get_result",
                 "kill_task",
+                "cleanup_tasks",
                 "research",
                 "analyze_code",
             ],
@@ -178,6 +207,7 @@ impl Preset {
                 "list_tasks",
                 "get_result",
                 "kill_task",
+                "cleanup_tasks",
                 "research",
                 "analyze_code",
                 "clink",
@@ -193,9 +223,9 @@ mod tests {
     #[test]
     fn test_preset_tool_counts() {
         assert_eq!(Preset::Minimal.tool_names().len(), 1);
-        assert_eq!(Preset::Agent.tool_names().len(), 6);
-        assert_eq!(Preset::Research.tool_names().len(), 8);
-        assert_eq!(Preset::Full.tool_names().len(), 9);
+        assert_eq!(Preset::Agent.tool_names().len(), 7);
+        assert_eq!(Preset::Research.tool_names().len(), 9);
+        assert_eq!(Preset::Full.tool_names().len(), 10);
     }
 
     #[test]
