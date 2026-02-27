@@ -410,6 +410,7 @@ impl GreatBridge {
     async fn run_sync(&self, binary: &str, args: &[String]) -> Result<String, String> {
         let mut cmd = tokio::process::Command::new(binary);
         cmd.args(args)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);

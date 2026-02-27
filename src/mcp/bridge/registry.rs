@@ -103,6 +103,7 @@ impl TaskRegistry {
 
         let mut cmd = Command::new(&binary);
         cmd.args(&args)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
