@@ -2,10 +2,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
 use rmcp::service::{RequestContext, RoleServer};
-use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::{tool, tool_router, ErrorData as McpError, ServerHandler, ServiceExt};
 
 use super::backends::BackendConfig;
@@ -59,10 +59,7 @@ impl GreatBridge {
     // -- chat group -------------------------------------------------------
 
     #[tool(description = "Send a prompt to an AI backend and get a synchronous response")]
-    async fn prompt(
-        &self,
-        params: Parameters<PromptParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn prompt(&self, params: Parameters<PromptParams>) -> Result<CallToolResult, McpError> {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
         let (binary, args) = super::backends::build_command_args(
             backend,
@@ -86,10 +83,7 @@ impl GreatBridge {
     #[tool(
         description = "Spawn an asynchronous AI backend task. Returns a task_id for later retrieval."
     )]
-    async fn run(
-        &self,
-        params: Parameters<RunParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn run(&self, params: Parameters<RunParams>) -> Result<CallToolResult, McpError> {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
         let timeout = params.0.timeout_secs.map(Duration::from_secs);
 
@@ -111,10 +105,7 @@ impl GreatBridge {
     #[tool(
         description = "Wait for one or more async tasks to complete. Returns results when all finish or timeout."
     )]
-    async fn wait(
-        &self,
-        params: Parameters<WaitParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn wait(&self, params: Parameters<WaitParams>) -> Result<CallToolResult, McpError> {
         let timeout = Duration::from_secs(params.0.timeout_secs.unwrap_or(300));
         let snapshots = self
             .registry
@@ -181,10 +172,7 @@ impl GreatBridge {
                     Ok(bytes) => {
                         let content = if bytes.len() > MAX_FILE_BYTES {
                             let truncated = String::from_utf8_lossy(&bytes[..MAX_FILE_BYTES]);
-                            format!(
-                                "{}\n[truncated at {} bytes]",
-                                truncated, MAX_FILE_BYTES
-                            )
+                            format!("{}\n[truncated at {} bytes]", truncated, MAX_FILE_BYTES)
                         } else {
                             String::from_utf8_lossy(&bytes).to_string()
                         };
@@ -270,10 +258,7 @@ impl GreatBridge {
     #[tool(
         description = "Spawn an isolated AI subagent with a custom system prompt. Returns a task_id."
     )]
-    async fn clink(
-        &self,
-        params: Parameters<ClinkParams>,
-    ) -> Result<CallToolResult, McpError> {
+    async fn clink(&self, params: Parameters<ClinkParams>) -> Result<CallToolResult, McpError> {
         let backend = self.resolve_backend(params.0.backend.as_deref())?;
 
         match self
@@ -304,9 +289,7 @@ impl ServerHandler for GreatBridge {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::LATEST,
-            capabilities: ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation {
                 name: "great-mcp-bridge".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -364,36 +347,28 @@ impl GreatBridge {
     /// Resolve which backend to use from an optional name.
     fn resolve_backend(&self, name: Option<&str>) -> Result<&BackendConfig, McpError> {
         match name {
-            Some(n) => self
-                .backends
-                .iter()
-                .find(|b| b.name == n)
-                .ok_or_else(|| {
-                    McpError::invalid_params(
-                        format!(
-                            "backend '{}' not available. Available: {}",
-                            n,
-                            self.backends
-                                .iter()
-                                .map(|b| b.name)
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ),
-                        None,
-                    )
-                }),
+            Some(n) => self.backends.iter().find(|b| b.name == n).ok_or_else(|| {
+                McpError::invalid_params(
+                    format!(
+                        "backend '{}' not available. Available: {}",
+                        n,
+                        self.backends
+                            .iter()
+                            .map(|b| b.name)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    None,
+                )
+            }),
             None => {
                 // Try default_backend, then first available
                 if let Some(ref default) = self.default_backend {
-                    self.backends
-                        .iter()
-                        .find(|b| b.name == default.as_str())
+                    self.backends.iter().find(|b| b.name == default.as_str())
                 } else {
                     self.backends.first()
                 }
-                .ok_or_else(|| {
-                    McpError::invalid_params("no backends available".to_string(), None)
-                })
+                .ok_or_else(|| McpError::invalid_params("no backends available".to_string(), None))
             }
         }
     }
@@ -513,9 +488,7 @@ pub async fn start_bridge(
             })
             .collect();
         if resolved.is_empty() {
-            tracing::warn!(
-                "allowed_dirs: resolved to empty list; all file reads will be rejected"
-            );
+            tracing::warn!("allowed_dirs: resolved to empty list; all file reads will be rejected");
         }
         resolved
     });

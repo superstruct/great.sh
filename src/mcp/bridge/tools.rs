@@ -101,9 +101,7 @@ impl AnalysisType {
         match self {
             Self::Review => "Review this code for correctness, design, and maintainability:\n\n",
             Self::Explain => "Explain what this code does, step by step:\n\n",
-            Self::Optimize => {
-                "Suggest performance and readability improvements for this code:\n\n"
-            }
+            Self::Optimize => "Suggest performance and readability improvements for this code:\n\n",
             Self::Security => "Audit this code for security vulnerabilities:\n\n",
             Self::Test => "Write comprehensive tests for this code:\n\n",
         }

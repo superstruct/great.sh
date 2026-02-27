@@ -4,7 +4,8 @@ pub struct BackendConfig {
     /// Backend identifier: "gemini", "codex", "claude", "grok", "ollama".
     pub name: &'static str,
     /// Human-readable display name for doctor/diagnostic output.
-    #[allow(dead_code)] // Set for API completeness; doctor reads from BackendSpec via all_backend_specs().
+    #[allow(dead_code)]
+    // Set for API completeness; doctor reads from BackendSpec via all_backend_specs().
     pub display_name: &'static str,
     /// Resolved absolute path to the CLI binary.
     pub binary: String,
@@ -13,7 +14,8 @@ pub struct BackendConfig {
     /// CLI flag to bypass interactive approval prompts.
     pub auto_approve_flag: Option<&'static str>,
     /// Environment variable name for the API key (None = uses login/no key).
-    #[allow(dead_code)] // Set for API completeness; doctor reads from BackendSpec via all_backend_specs().
+    #[allow(dead_code)]
+    // Set for API completeness; doctor reads from BackendSpec via all_backend_specs().
     pub api_key_env: Option<&'static str>,
 }
 
@@ -256,7 +258,9 @@ mod tests {
         };
         let (_, args) = build_command_args(&backend, "hello", None, Some("You are helpful"), true);
         // System prompt should be prepended to the prompt text
-        assert!(args.last().map_or(false, |a| a.contains("SYSTEM: You are helpful")));
+        assert!(args
+            .last()
+            .map_or(false, |a| a.contains("SYSTEM: You are helpful")));
         assert!(args.last().map_or(false, |a| a.contains("TASK: hello")));
     }
 

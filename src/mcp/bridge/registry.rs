@@ -93,8 +93,13 @@ impl TaskRegistry {
         let task_id = Uuid::new_v4().to_string();
         let timeout = timeout_override.unwrap_or(self.default_timeout);
 
-        let (binary, args) =
-            build_command_args(backend, prompt, model_override, system_prompt, self.auto_approve);
+        let (binary, args) = build_command_args(
+            backend,
+            prompt,
+            model_override,
+            system_prompt,
+            self.auto_approve,
+        );
 
         let mut cmd = Command::new(&binary);
         cmd.args(&args)
@@ -118,9 +123,9 @@ impl TaskRegistry {
             }
         }
 
-        let child = cmd.spawn().map_err(|e| {
-            anyhow::anyhow!("failed to spawn {} ({}): {}", backend.name, binary, e)
-        })?;
+        let child = cmd
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("failed to spawn {} ({}): {}", backend.name, binary, e))?;
 
         let pid = child.id().unwrap_or(0);
 

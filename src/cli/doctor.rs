@@ -91,9 +91,7 @@ pub fn run(args: Args) -> Result<()> {
 
     // 7b. MCP Bridge backend checks (always check -- auto-approve warning
     // should appear even without [mcp-bridge] config when Claude is on PATH)
-    let bridge_cfg = loaded_config
-        .as_ref()
-        .and_then(|c| c.mcp_bridge.as_ref());
+    let bridge_cfg = loaded_config.as_ref().and_then(|c| c.mcp_bridge.as_ref());
     check_mcp_bridge(&mut result, bridge_cfg);
 
     // 8. Shell check
@@ -654,9 +652,7 @@ fn check_mcp_bridge(
     }
 
     // Warn about auto-approve flags
-    let auto_approve_enabled = bridge_config
-        .and_then(|b| b.auto_approve)
-        .unwrap_or(true);
+    let auto_approve_enabled = bridge_config.and_then(|b| b.auto_approve).unwrap_or(true);
 
     if command_exists("claude") {
         if auto_approve_enabled {
