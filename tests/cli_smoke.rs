@@ -1547,6 +1547,75 @@ fn loop_install_force_overwrites_existing() {
     );
 }
 
+// -----------------------------------------------------------------------
+// Loop -- help, status, uninstall, and install artefacts
+// -----------------------------------------------------------------------
+
+#[test]
+fn loop_help_shows_subcommands() {
+    great()
+        .args(["loop", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("install").and(predicate::str::contains("status")));
+}
+
+#[test]
+fn loop_status_fresh_home_reports_not_installed() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .args(["loop", "status"])
+        .env("HOME", dir.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("not installed"));
+}
+
+#[test]
+fn loop_uninstall_fresh_home_is_noop() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .args(["loop", "uninstall"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+}
+
+#[test]
+fn loop_install_force_writes_hook_script() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    let hook = dir.path().join(".claude/hooks/great-loop/update-state.sh");
+    assert!(hook.exists(), "hook script must be written");
+}
+
+#[test]
+fn loop_install_force_writes_settings_json() {
+    let dir = TempDir::new().unwrap();
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    let settings = dir.path().join(".claude/settings.json");
+    assert!(settings.exists(), "settings.json must be created");
+    let content = std::fs::read_to_string(&settings).unwrap();
+    assert!(
+        content.contains("hooks"),
+        "settings.json must contain hooks configuration"
+    );
+    assert!(
+        content.contains("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"),
+        "settings.json must contain agent teams env"
+    );
+}
+
 #[test]
 fn statusline_with_state_file_renders_agents() {
     let dir = TempDir::new().unwrap();
@@ -1889,4 +1958,13 @@ fn mcp_bridge_unknown_preset_fails() {
         .args(["mcp-bridge", "--preset", "invalid"])
         .assert()
         .failure();
+}
+
+#[test]
+fn mcp_bridge_unknown_preset_shows_error_message() {
+    great()
+        .args(["mcp-bridge", "--preset", "invalid_preset_xyz"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid preset"));
 }
