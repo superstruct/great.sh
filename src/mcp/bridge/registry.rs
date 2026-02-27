@@ -65,13 +65,15 @@ struct TaskHandle {
 pub struct TaskRegistry {
     tasks: Arc<Mutex<HashMap<String, TaskHandle>>>,
     pub default_timeout: Duration,
+    pub auto_approve: bool,
 }
 
 impl TaskRegistry {
-    pub fn new(timeout_secs: u64) -> Self {
+    pub fn new(timeout_secs: u64, auto_approve: bool) -> Self {
         Self {
             tasks: Arc::new(Mutex::new(HashMap::new())),
             default_timeout: Duration::from_secs(timeout_secs),
+            auto_approve,
         }
     }
 
@@ -91,7 +93,8 @@ impl TaskRegistry {
         let task_id = Uuid::new_v4().to_string();
         let timeout = timeout_override.unwrap_or(self.default_timeout);
 
-        let (binary, args) = build_command_args(backend, prompt, model_override, system_prompt);
+        let (binary, args) =
+            build_command_args(backend, prompt, model_override, system_prompt, self.auto_approve);
 
         let mut cmd = Command::new(&binary);
         cmd.args(&args)
@@ -334,7 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_registry_is_empty() {
-        let registry = TaskRegistry::new(300);
+        let registry = TaskRegistry::new(300, true);
         let tasks = registry.list_tasks().await;
         assert!(tasks.is_empty());
     }

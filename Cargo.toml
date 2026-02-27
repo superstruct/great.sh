@@ -36,3 +36,8 @@ libc = "0.2"
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile = "3.0"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

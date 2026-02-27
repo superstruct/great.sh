@@ -161,6 +161,17 @@ pub struct McpBridgeConfig {
     /// Tool preset: "minimal", "agent", "research", "full" (default: "agent").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
+
+    /// Whether to pass auto-approval flags (e.g., --dangerously-skip-permissions)
+    /// to backends. Default: true. Set to false to require interactive approval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_approve: Option<bool>,
+
+    /// Optional directory allowlist for file-reading tools (research, analyze_code).
+    /// When set, only files under these directories can be read.
+    /// Paths are canonicalized at startup; relative paths are resolved from cwd.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_dirs: Option<Vec<String>>,
 }
 
 /// A validation message produced by [`GreatConfig::validate`].

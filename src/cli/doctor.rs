@@ -89,14 +89,12 @@ pub fn run(args: Args) -> Result<()> {
         check_mcp_servers(&mut result, cfg);
     }
 
-    // 7b. MCP Bridge backend checks (only if [mcp-bridge] is configured)
-    if loaded_config
+    // 7b. MCP Bridge backend checks (always check -- auto-approve warning
+    // should appear even without [mcp-bridge] config when Claude is on PATH)
+    let bridge_cfg = loaded_config
         .as_ref()
-        .and_then(|c| c.mcp_bridge.as_ref())
-        .is_some()
-    {
-        check_mcp_bridge(&mut result);
-    }
+        .and_then(|c| c.mcp_bridge.as_ref());
+    check_mcp_bridge(&mut result, bridge_cfg);
 
     // 8. Shell check
     check_shell(&mut result);
@@ -611,39 +609,40 @@ fn check_mcp_servers(result: &mut DiagnosticResult, cfg: &config::GreatConfig) {
     println!();
 }
 
-/// Check MCP bridge backend availability and .mcp.json registration.
-fn check_mcp_bridge(result: &mut DiagnosticResult) {
+/// Check MCP bridge backend availability, auto-approve status, and .mcp.json registration.
+fn check_mcp_bridge(
+    result: &mut DiagnosticResult,
+    bridge_config: Option<&crate::config::schema::McpBridgeConfig>,
+) {
+    use crate::mcp::bridge::backends::all_backend_specs;
+
     output::header("MCP Bridge");
 
-    // Check each backend binary
-    let backends = [
-        ("gemini", "Gemini CLI", "GEMINI_API_KEY"),
-        ("codex", "Codex CLI", "OPENAI_API_KEY"),
-        ("claude", "Claude CLI", ""),
-        ("grok", "Grok CLI", "XAI_API_KEY"),
-        ("ollama", "Ollama", ""),
-    ];
-
+    // Check each backend binary using the canonical spec list
     let mut any_found = false;
-    for (binary, name, api_key_env) in &backends {
+    for (binary, display_name, api_key_env) in all_backend_specs() {
         if command_exists(binary) {
             any_found = true;
-            if api_key_env.is_empty() {
-                // No API key needed (uses login or local)
-                pass(result, &format!("{}: installed", name));
-            } else if std::env::var(api_key_env).is_ok() {
-                pass(
-                    result,
-                    &format!("{}: installed, {} set", name, api_key_env),
-                );
-            } else {
-                warn(
-                    result,
-                    &format!("{}: installed, {} not set", name, api_key_env),
-                );
+            match api_key_env {
+                None => {
+                    pass(result, &format!("{}: installed", display_name));
+                }
+                Some(env_var) => {
+                    if std::env::var(env_var).is_ok() {
+                        pass(
+                            result,
+                            &format!("{}: installed, {} set", display_name, env_var),
+                        );
+                    } else {
+                        warn(
+                            result,
+                            &format!("{}: installed, {} not set", display_name, env_var),
+                        );
+                    }
+                }
             }
         } else {
-            warn(result, &format!("{}: not found (optional)", name));
+            warn(result, &format!("{}: not found (optional)", display_name));
         }
     }
 
@@ -654,16 +653,38 @@ fn check_mcp_bridge(result: &mut DiagnosticResult) {
         );
     }
 
-    // Check .mcp.json registration
-    let mcp_path = crate::mcp::project_mcp_path();
-    let mcp_json = crate::mcp::McpJsonConfig::load(&mcp_path).unwrap_or_default();
-    if mcp_json.has_server("great-bridge") {
-        pass(result, "great-bridge: registered in .mcp.json");
-    } else {
-        warn(
-            result,
-            "great-bridge: not in .mcp.json — run `great apply` to register",
-        );
+    // Warn about auto-approve flags
+    let auto_approve_enabled = bridge_config
+        .and_then(|b| b.auto_approve)
+        .unwrap_or(true);
+
+    if command_exists("claude") {
+        if auto_approve_enabled {
+            warn(
+                result,
+                "Claude backend uses --dangerously-skip-permissions (auto-approve enabled). \
+                 Set auto-approve = false in [mcp-bridge] to disable.",
+            );
+        } else {
+            pass(
+                result,
+                "Claude backend: auto-approve disabled (--dangerously-skip-permissions suppressed)",
+            );
+        }
+    }
+
+    // Check .mcp.json registration -- only if bridge is configured
+    if bridge_config.is_some() {
+        let mcp_path = crate::mcp::project_mcp_path();
+        let mcp_json = crate::mcp::McpJsonConfig::load(&mcp_path).unwrap_or_default();
+        if mcp_json.has_server("great-bridge") {
+            pass(result, "great-bridge: registered in .mcp.json");
+        } else {
+            warn(
+                result,
+                "great-bridge: not in .mcp.json — run `great apply` to register",
+            );
+        }
     }
 
     println!();

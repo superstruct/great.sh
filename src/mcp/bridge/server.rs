@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,6 +30,8 @@ pub struct GreatBridge {
     default_backend: Option<String>,
     registry: TaskRegistry,
     preset: Preset,
+    allowed_dirs: Option<Vec<PathBuf>>,
+    auto_approve: bool,
     tool_router: ToolRouter<Self>,
 }
 
@@ -39,12 +42,16 @@ impl GreatBridge {
         default_backend: Option<String>,
         registry: TaskRegistry,
         preset: Preset,
+        allowed_dirs: Option<Vec<PathBuf>>,
+        auto_approve: bool,
     ) -> Self {
         Self {
             backends: Arc::new(backends),
             default_backend,
             registry,
             preset,
+            allowed_dirs,
+            auto_approve,
             tool_router: Self::tool_router(),
         }
     }
@@ -62,6 +69,7 @@ impl GreatBridge {
             &params.0.prompt,
             params.0.model.as_deref(),
             None,
+            self.auto_approve,
         );
 
         match self.run_sync(&binary, &args).await {
@@ -166,6 +174,9 @@ impl GreatBridge {
         let mut composite_prompt = String::new();
         if let Some(files) = &params.0.files {
             for path in files {
+                if let Err(e) = self.validate_path(path) {
+                    return Ok(CallToolResult::error(vec![Content::text(e)]));
+                }
                 match std::fs::read(path) {
                     Ok(bytes) => {
                         let content = if bytes.len() > MAX_FILE_BYTES {
@@ -194,6 +205,7 @@ impl GreatBridge {
             &composite_prompt,
             params.0.model.as_deref(),
             None,
+            self.auto_approve,
         );
 
         match self.run_sync(&binary, &args).await {
@@ -218,6 +230,9 @@ impl GreatBridge {
 
         // Resolve code_or_path
         let code = if std::path::Path::new(&params.0.code_or_path).exists() {
+            if let Err(e) = self.validate_path(&params.0.code_or_path) {
+                return Ok(CallToolResult::error(vec![Content::text(e)]));
+            }
             match std::fs::read_to_string(&params.0.code_or_path) {
                 Ok(content) => content,
                 Err(e) => {
@@ -238,6 +253,7 @@ impl GreatBridge {
             &prompt,
             params.0.model.as_deref(),
             None,
+            self.auto_approve,
         );
 
         match self.run_sync(&binary, &args).await {
@@ -382,6 +398,39 @@ impl GreatBridge {
         }
     }
 
+    /// Validate that a file path is allowed by the configured allowed_dirs.
+    ///
+    /// When `allowed_dirs` is `None`, all paths are allowed (single-user
+    /// threat model). When `Some`, each requested path is canonicalized
+    /// and checked against the allowed directory prefixes.
+    fn validate_path(&self, raw_path: &str) -> Result<(), String> {
+        let allowed = match &self.allowed_dirs {
+            Some(dirs) => dirs,
+            None => return Ok(()),
+        };
+
+        let canonical = std::fs::canonicalize(raw_path)
+            .map_err(|e| format!("cannot resolve path '{}': {}", raw_path, e))?;
+
+        for dir in allowed {
+            if canonical.starts_with(dir) {
+                return Ok(());
+            }
+        }
+
+        Err(format!(
+            "path not in allowed directories: '{}' (canonical: {}). \
+             Allowed: {}",
+            raw_path,
+            canonical.display(),
+            allowed
+                .iter()
+                .map(|d| d.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ))
+    }
+
     /// Execute a backend command synchronously (with timeout).
     async fn run_sync(&self, binary: &str, args: &[String]) -> Result<String, String> {
         let mut cmd = tokio::process::Command::new(binary);
@@ -443,8 +492,42 @@ pub async fn start_bridge(
     default_backend: Option<String>,
     registry: TaskRegistry,
     preset: Preset,
+    allowed_dirs: Option<Vec<PathBuf>>,
+    auto_approve: bool,
 ) -> anyhow::Result<()> {
-    let bridge = GreatBridge::new(backends, default_backend, registry.clone(), preset);
+    // Canonicalize allowed_dirs at startup so relative paths work
+    let allowed_dirs = allowed_dirs.map(|dirs| {
+        let resolved: Vec<PathBuf> = dirs
+            .into_iter()
+            .filter_map(|d| {
+                std::fs::canonicalize(&d)
+                    .map_err(|e| {
+                        tracing::warn!(
+                            "allowed_dirs: cannot resolve '{}': {} (skipping)",
+                            d.display(),
+                            e
+                        );
+                        e
+                    })
+                    .ok()
+            })
+            .collect();
+        if resolved.is_empty() {
+            tracing::warn!(
+                "allowed_dirs: resolved to empty list; all file reads will be rejected"
+            );
+        }
+        resolved
+    });
+
+    let bridge = GreatBridge::new(
+        backends,
+        default_backend,
+        registry.clone(),
+        preset,
+        allowed_dirs,
+        auto_approve,
+    );
 
     tracing::info!(
         "great-mcp-bridge starting (preset={:?}, backends={})",

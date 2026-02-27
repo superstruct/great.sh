@@ -36,6 +36,10 @@ fn main() -> Result<()> {
             cli::loop_cmd::run(args)
         }
         Command::Statusline(args) => cli::statusline::run(args),
-        Command::McpBridge(args) => cli::mcp_bridge::run(args),
+        Command::McpBridge(mut args) => {
+            args.verbose = cli.verbose;
+            args.quiet = cli.quiet;
+            cli::mcp_bridge::run(args)
+        }
     }
 }
