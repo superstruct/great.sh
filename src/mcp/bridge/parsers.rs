@@ -138,8 +138,8 @@ fn parse_claude_output(raw: &str) -> ParsedOutput {
 ///
 /// Expected line types:
 /// - `{"type":"thread.started","thread_id":"..."}` — thread metadata
-/// - `{"type":"message","role":"assistant","content":"..."}` — response
-/// - `{"type":"token_count",...}` or `{"msg":{"type":"token_count",...}}` — usage
+/// - `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}` — response
+/// - `{"type":"turn.completed","usage":{"input_tokens":...,"output_tokens":...}}` — usage
 fn parse_codex_output(raw: &str) -> ParsedOutput {
     let mut thread_id: Option<String> = None;
     let mut last_assistant_msg = String::new();
@@ -163,24 +163,26 @@ fn parse_codex_output(raw: &str) -> ParsedOutput {
                     thread_id = Some(tid.to_string());
                 }
             }
-            Some("message") => {
-                if val.get("role").and_then(|r| r.as_str()) == Some("assistant") {
-                    if let Some(content) = val.get("content").and_then(|c| c.as_str()) {
-                        last_assistant_msg = content.to_string();
+            Some("item.completed") => {
+                // {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+                if let Some(item) = val.get("item") {
+                    if item.get("type").and_then(|t| t.as_str()) == Some("agent_message") {
+                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                            last_assistant_msg = text.to_string();
+                        }
                     }
                 }
             }
-            Some("token_count") => {
-                usage = extract_codex_usage(&val);
-            }
-            _ => {
-                // Check for nested msg.type pattern
-                if let Some(msg) = val.get("msg") {
-                    if msg.get("type").and_then(|t| t.as_str()) == Some("token_count") {
-                        usage = extract_codex_usage(msg);
-                    }
+            Some("turn.completed") => {
+                // {"type":"turn.completed","usage":{"input_tokens":...,"output_tokens":...}}
+                if let Some(u) = val.get("usage") {
+                    usage = Some(TokenUsage {
+                        input_tokens: u.get("input_tokens").and_then(|v| v.as_u64()),
+                        output_tokens: u.get("output_tokens").and_then(|v| v.as_u64()),
+                    });
                 }
             }
+            _ => {}
         }
     }
 
@@ -195,13 +197,6 @@ fn parse_codex_output(raw: &str) -> ParsedOutput {
         tool_usage: Vec::new(),
         is_structured: true,
     }
-}
-
-fn extract_codex_usage(val: &serde_json::Value) -> Option<TokenUsage> {
-    Some(TokenUsage {
-        input_tokens: val.get("input_tokens").and_then(|v| v.as_u64()),
-        output_tokens: val.get("output_tokens").and_then(|v| v.as_u64()),
-    })
 }
 
 /// Parse Gemini CLI JSON output (single JSON object).
@@ -287,8 +282,9 @@ from the assistant"#;
     #[test]
     fn test_parse_codex_output_full() {
         let raw = r#"{"type":"thread.started","thread_id":"thread-xyz-789"}
-{"type":"message","role":"assistant","content":"Hello, world!"}
-{"type":"token_count","input_tokens":100,"output_tokens":25}"#;
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Hello, world!"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":25}}"#;
 
         let parsed = parse_codex_output(raw);
         assert!(parsed.is_structured);
@@ -299,14 +295,15 @@ from the assistant"#;
     }
 
     #[test]
-    fn test_parse_codex_output_nested_token_count() {
+    fn test_parse_codex_output_turn_completed_usage() {
         let raw = r#"{"type":"thread.started","thread_id":"t-1"}
-{"type":"message","role":"assistant","content":"Done."}
-{"msg":{"type":"token_count","input_tokens":50,"output_tokens":10}}"#;
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Done."}}
+{"type":"turn.completed","usage":{"input_tokens":50,"output_tokens":10}}"#;
 
         let parsed = parse_codex_output(raw);
         assert!(parsed.is_structured);
         assert_eq!(parsed.usage.as_ref().unwrap().input_tokens, Some(50));
+        assert_eq!(parsed.usage.as_ref().unwrap().output_tokens, Some(10));
     }
 
     #[test]
@@ -384,11 +381,11 @@ from the assistant"#;
     }
 
     #[test]
-    fn test_parse_codex_multiple_assistant_messages() {
-        // Should use the last assistant message
+    fn test_parse_codex_multiple_items() {
+        // Should use the last agent_message item
         let raw = r#"{"type":"thread.started","thread_id":"t-1"}
-{"type":"message","role":"assistant","content":"First response"}
-{"type":"message","role":"assistant","content":"Final response"}"#;
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"First response"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Final response"}}"#;
 
         let parsed = parse_codex_output(raw);
         assert_eq!(parsed.result, "Final response");
