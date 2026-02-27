@@ -12,12 +12,11 @@ export function OpenSource() {
             Open source. Free forever.
           </h2>
           <p className="text-text-secondary mb-6 leading-relaxed">
-            The CLI is free and open source under the Apache 2.0 license. All local features work without
-            an account. Cloud sync and team features are optional paid tiers &mdash; the core
-            tool is yours to keep, forever.
+            The CLI is free and open source under the Apache 2.0 license. Every feature works
+            without an account. No paywalls, no telemetry &mdash; the tool is yours to keep, forever.
           </p>
           <p className="text-text-tertiary text-sm mb-10">
-            BYO credentials. We never see your API keys. All encryption happens client-side.
+            BYO credentials. We never see your API keys. Secrets stay in your system keychain.
           </p>
 
           <motion.div

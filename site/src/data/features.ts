@@ -24,9 +24,9 @@ export const features: Feature[] = [
     icon: 'server',
   },
   {
-    title: 'Cloud-Synced Credentials',
+    title: 'Credential Vault',
     description:
-      'Zero-knowledge encrypted vault syncs API keys and config across machines. BYO credentials \u2014 we never see your keys.',
+      'Store API keys in your system keychain, import from .env files, and snapshot config locally. BYO credentials \u2014 cloud sync coming soon.',
     icon: 'shield',
   },
   {

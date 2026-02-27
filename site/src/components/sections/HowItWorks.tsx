@@ -25,8 +25,8 @@ const steps = [
   },
   {
     number: '04',
-    title: 'Sync',
-    description: 'Push your encrypted config to the cloud. Pull it on any new machine.',
+    title: 'Snapshot',
+    description: 'Save a local config snapshot. Restore it anytime, or on a fresh install.',
     command: 'great sync push',
   },
   {

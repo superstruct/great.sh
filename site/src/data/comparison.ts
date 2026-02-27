@@ -74,7 +74,7 @@ export const comparisonData: ComparisonRow[] = [
   },
   {
     feature: 'Cross-machine sync',
-    great: true,
+    great: 'Local only',
     chezmoi: 'Git-based',
     mise: false,
     nix: 'Git-based',

@@ -18,7 +18,7 @@ export const initWizardOutput = `$ great init
     [x] Memory (knowledge graph)
     [x] Playwright (browser automation)
 
-  ? Enter your API keys (stored in encrypted vault):
+  ? Enter your API keys (stored in system keychain):
     ANTHROPIC_API_KEY: ********************
     OPENAI_API_KEY: ********************
 
