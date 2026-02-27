@@ -89,6 +89,15 @@ pub fn run(args: Args) -> Result<()> {
         check_mcp_servers(&mut result, cfg);
     }
 
+    // 7b. MCP Bridge backend checks (only if [mcp-bridge] is configured)
+    if loaded_config
+        .as_ref()
+        .and_then(|c| c.mcp_bridge.as_ref())
+        .is_some()
+    {
+        check_mcp_bridge(&mut result);
+    }
+
     // 8. Shell check
     check_shell(&mut result);
 
@@ -597,6 +606,64 @@ fn check_mcp_servers(result: &mut DiagnosticResult, cfg: &config::GreatConfig) {
                 &format!("{}: command '{}' not found on PATH", name, mcp.command),
             );
         }
+    }
+
+    println!();
+}
+
+/// Check MCP bridge backend availability and .mcp.json registration.
+fn check_mcp_bridge(result: &mut DiagnosticResult) {
+    output::header("MCP Bridge");
+
+    // Check each backend binary
+    let backends = [
+        ("gemini", "Gemini CLI", "GEMINI_API_KEY"),
+        ("codex", "Codex CLI", "OPENAI_API_KEY"),
+        ("claude", "Claude CLI", ""),
+        ("grok", "Grok CLI", "XAI_API_KEY"),
+        ("ollama", "Ollama", ""),
+    ];
+
+    let mut any_found = false;
+    for (binary, name, api_key_env) in &backends {
+        if command_exists(binary) {
+            any_found = true;
+            if api_key_env.is_empty() {
+                // No API key needed (uses login or local)
+                pass(result, &format!("{}: installed", name));
+            } else if std::env::var(api_key_env).is_ok() {
+                pass(
+                    result,
+                    &format!("{}: installed, {} set", name, api_key_env),
+                );
+            } else {
+                warn(
+                    result,
+                    &format!("{}: installed, {} not set", name, api_key_env),
+                );
+            }
+        } else {
+            warn(result, &format!("{}: not found (optional)", name));
+        }
+    }
+
+    if !any_found {
+        warn(
+            result,
+            "No MCP bridge backends found. Install at least one: gemini, codex, claude, grok, ollama",
+        );
+    }
+
+    // Check .mcp.json registration
+    let mcp_path = crate::mcp::project_mcp_path();
+    let mcp_json = crate::mcp::McpJsonConfig::load(&mcp_path).unwrap_or_default();
+    if mcp_json.has_server("great-bridge") {
+        pass(result, "great-bridge: registered in .mcp.json");
+    } else {
+        warn(
+            result,
+            "great-bridge: not in .mcp.json — run `great apply` to register",
+        );
     }
 
     println!();

@@ -1,3 +1,5 @@
+pub mod bridge;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -42,7 +44,6 @@ impl McpJsonConfig {
     }
 
     /// Save this config as pretty-printed JSON to the given path.
-    #[allow(dead_code)] // Planned for GROUP C (mcp add command).
     pub fn save(&self, path: &Path) -> Result<()> {
         let json = serde_json::to_string_pretty(self).context("failed to serialize MCP config")?;
         std::fs::write(path, json).context(format!("failed to write {}", path.display()))?;

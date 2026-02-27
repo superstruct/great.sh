@@ -21,6 +21,9 @@ pub struct GreatConfig {
     pub secrets: Option<SecretsConfig>,
     /// Platform-specific overrides (macOS, Linux, WSL2).
     pub platform: Option<PlatformConfig>,
+    /// MCP bridge server configuration.
+    #[serde(rename = "mcp-bridge", skip_serializing_if = "Option::is_none")]
+    pub mcp_bridge: Option<McpBridgeConfig>,
 }
 
 /// Project metadata section.
@@ -134,6 +137,32 @@ pub struct PlatformOverride {
     pub extra_tools: Option<Vec<String>>,
 }
 
+/// Configuration for the `[mcp-bridge]` section of `great.toml`.
+///
+/// Controls which AI CLI backends the bridge exposes, the default backend
+/// for tool calls that omit a backend parameter, and per-task timeout.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct McpBridgeConfig {
+    /// Restrict to a subset of backends (default: auto-detect all installed).
+    /// Valid values: "gemini", "codex", "claude", "grok", "ollama".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backends: Option<Vec<String>>,
+
+    /// Backend to use when a tool call omits the `backend` parameter.
+    /// Falls back to the first discovered backend if unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_backend: Option<String>,
+
+    /// Per-task timeout in seconds (default: 300).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
+
+    /// Tool preset: "minimal", "agent", "research", "full" (default: "agent").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+}
+
 /// A validation message produced by [`GreatConfig::validate`].
 #[derive(Debug, Clone)]
 pub enum ConfigMessage {
@@ -203,6 +232,32 @@ impl GreatConfig {
                         "mcp '{}': transport 'http' requires a 'url' field",
                         name
                     )));
+                }
+            }
+        }
+
+        // Check: mcp-bridge preset and backends must be known values
+        if let Some(bridge) = &self.mcp_bridge {
+            if let Some(preset) = &bridge.preset {
+                let known_presets = ["minimal", "agent", "research", "full"];
+                if !known_presets.contains(&preset.as_str()) {
+                    messages.push(ConfigMessage::Warning(format!(
+                        "mcp-bridge: unknown preset '{}' -- known presets: {}",
+                        preset,
+                        known_presets.join(", ")
+                    )));
+                }
+            }
+            if let Some(backends) = &bridge.backends {
+                let known_backends = ["gemini", "codex", "claude", "grok", "ollama"];
+                for b in backends {
+                    if !known_backends.contains(&b.as_str()) {
+                        messages.push(ConfigMessage::Warning(format!(
+                            "mcp-bridge: unknown backend '{}' -- known backends: {}",
+                            b,
+                            known_backends.join(", ")
+                        )));
+                    }
                 }
             }
         }

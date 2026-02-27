@@ -5,6 +5,7 @@ pub mod doctor;
 pub mod init;
 pub mod loop_cmd;
 pub mod mcp;
+pub mod mcp_bridge;
 pub mod output;
 pub mod status;
 pub mod statusline;
@@ -75,4 +76,8 @@ pub enum Command {
 
     /// Render a single statusline for Claude Code (called every 300ms)
     Statusline(statusline::Args),
+
+    /// Start an inbuilt MCP bridge server (stdio JSON-RPC 2.0) — no Node.js required
+    #[command(name = "mcp-bridge")]
+    McpBridge(mcp_bridge::Args),
 }

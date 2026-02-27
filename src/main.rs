@@ -36,5 +36,6 @@ fn main() -> Result<()> {
             cli::loop_cmd::run(args)
         }
         Command::Statusline(args) => cli::statusline::run(args),
+        Command::McpBridge(args) => cli::mcp_bridge::run(args),
     }
 }

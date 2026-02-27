@@ -723,6 +723,60 @@ pub fn run(args: Args) -> Result<()> {
         }
     }
 
+    // 5a. Register MCP bridge in .mcp.json
+    if let Some(ref bridge_cfg) = cfg.mcp_bridge {
+        output::header("MCP Bridge");
+
+        let mcp_json_path = crate::mcp::project_mcp_path();
+        let mut mcp_json = crate::mcp::McpJsonConfig::load(&mcp_json_path).unwrap_or_default();
+
+        // Build desired args
+        let mut bridge_args = vec!["mcp-bridge".to_string()];
+        if let Some(ref preset) = bridge_cfg.preset {
+            bridge_args.push("--preset".to_string());
+            bridge_args.push(preset.clone());
+        }
+        if let Some(ref backends) = bridge_cfg.backends {
+            bridge_args.push("--backends".to_string());
+            bridge_args.push(backends.join(","));
+        }
+
+        let desired_entry = crate::mcp::McpServerEntry {
+            command: "great".to_string(),
+            args: Some(bridge_args.clone()),
+            env: None,
+        };
+
+        // Check if entry already exists with matching args
+        let needs_update = if let Some(existing) = mcp_json.mcp_servers.get("great-bridge") {
+            existing.args.as_ref() != Some(&bridge_args) || existing.command != "great"
+        } else {
+            true
+        };
+
+        if needs_update {
+            if args.dry_run {
+                output::info("  great-bridge — would register in .mcp.json");
+            } else {
+                mcp_json
+                    .mcp_servers
+                    .insert("great-bridge".to_string(), desired_entry);
+                if let Err(e) = mcp_json.save(&mcp_json_path) {
+                    output::error(&format!(
+                        "  great-bridge — failed to write .mcp.json: {}",
+                        e
+                    ));
+                } else {
+                    output::success("  great-bridge — registered in .mcp.json");
+                }
+            }
+        } else {
+            output::success("  great-bridge — already registered in .mcp.json");
+        }
+
+        println!();
+    }
+
     // 5b. Install bitwarden-cli if secrets provider is bitwarden and bw is missing
     if let Some(secrets) = &cfg.secrets {
         if secrets.provider.as_deref() == Some("bitwarden") && !command_exists("bw") {

@@ -1869,3 +1869,24 @@ fn status_verbose_with_config_shows_capabilities() {
         .success()
         .stderr(predicate::str::contains("Shell:"));
 }
+
+// -----------------------------------------------------------------------
+// MCP Bridge
+// -----------------------------------------------------------------------
+
+#[test]
+fn mcp_bridge_help_shows_description() {
+    great()
+        .args(["mcp-bridge", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MCP bridge server"));
+}
+
+#[test]
+fn mcp_bridge_unknown_preset_fails() {
+    great()
+        .args(["mcp-bridge", "--preset", "invalid"])
+        .assert()
+        .failure();
+}

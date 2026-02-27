@@ -319,6 +319,7 @@ fn merge_configs(
         },
         secrets: existing.secrets.or(template.secrets),
         platform: existing.platform.or(template.platform),
+        mcp_bridge: existing.mcp_bridge.or(template.mcp_bridge),
     }
 }
 
