@@ -49,3 +49,5 @@ infra/cdk/cdk.out/
 macos-storage/
 ubuntu-vm-storage/
 windows-storage/
+
+test-files/
