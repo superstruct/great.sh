@@ -338,8 +338,7 @@ mod tests {
     #[test]
     fn test_build_command_args_claude_with_system_prompt() {
         let backend = make_backend("claude");
-        let spec =
-            build_command_args(&backend, "hello", None, Some("You are helpful"), true, None);
+        let spec = build_command_args(&backend, "hello", None, Some("You are helpful"), true, None);
         assert!(spec.args.contains(&"--append-system-prompt".to_string()));
         assert!(spec.args.contains(&"You are helpful".to_string()));
     }
@@ -347,8 +346,7 @@ mod tests {
     #[test]
     fn test_build_command_args_gemini_with_system_prompt() {
         let backend = make_backend("gemini");
-        let spec =
-            build_command_args(&backend, "hello", None, Some("You are helpful"), true, None);
+        let spec = build_command_args(&backend, "hello", None, Some("You are helpful"), true, None);
         // System prompt should be prepended to the prompt text
         assert!(spec
             .args
@@ -382,10 +380,13 @@ mod tests {
     #[test]
     fn test_build_command_args_codex_with_system_prompt() {
         let backend = make_backend("codex");
-        let spec =
-            build_command_args(&backend, "task", None, Some("You are helpful"), true, None);
+        let spec = build_command_args(&backend, "task", None, Some("You are helpful"), true, None);
         assert_eq!(spec.args[0], "exec");
-        assert!(spec.args.last().unwrap().contains("SYSTEM: You are helpful"));
+        assert!(spec
+            .args
+            .last()
+            .unwrap()
+            .contains("SYSTEM: You are helpful"));
         assert!(spec.args.last().unwrap().contains("TASK: task"));
     }
 
@@ -424,8 +425,7 @@ mod tests {
     #[test]
     fn test_build_command_args_claude_session_resume() {
         let backend = make_backend("claude");
-        let spec =
-            build_command_args(&backend, "hello", None, None, true, Some("session-abc-123"));
+        let spec = build_command_args(&backend, "hello", None, None, true, Some("session-abc-123"));
         assert!(spec.args.contains(&"-r".to_string()));
         assert!(spec.args.contains(&"session-abc-123".to_string()));
     }
@@ -433,8 +433,7 @@ mod tests {
     #[test]
     fn test_build_command_args_codex_session_resume() {
         let backend = make_backend("codex");
-        let spec =
-            build_command_args(&backend, "hello", None, None, true, Some("thread-xyz-789"));
+        let spec = build_command_args(&backend, "hello", None, None, true, Some("thread-xyz-789"));
         // codex exec resume <thread_id> ...
         assert_eq!(spec.args[0], "exec");
         assert_eq!(spec.args[1], "resume");

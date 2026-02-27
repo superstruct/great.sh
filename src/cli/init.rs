@@ -244,7 +244,9 @@ pub fn run(args: Args) -> Result<()> {
             ..Default::default()
         });
         output::success(&format!("MCP bridge enabled with {} preset", preset));
-        output::info("  Presets: minimal (1 tool) | agent (6 tools) | research (8 tools) | full (9 tools)");
+        output::info(
+            "  Presets: minimal (1 tool) | agent (6 tools) | research (8 tools) | full (9 tools)",
+        );
     }
 
     // Secrets section

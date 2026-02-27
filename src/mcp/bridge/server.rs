@@ -161,8 +161,7 @@ impl GreatBridge {
             .await
         {
             Some(json_val) => {
-                let json =
-                    serde_json::to_string(&json_val).unwrap_or_else(|_| "{}".to_string());
+                let json = serde_json::to_string(&json_val).unwrap_or_else(|_| "{}".to_string());
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
             None => Ok(CallToolResult::error(vec![Content::text(format!(
@@ -509,10 +508,8 @@ impl GreatBridge {
 
                 if !output.status.success() {
                     let exit_code = output.status.code().unwrap_or(-1);
-                    parsed.result = format!(
-                        "[exit code {}] {}\n{}",
-                        exit_code, parsed.result, stderr
-                    );
+                    parsed.result =
+                        format!("[exit code {}] {}\n{}", exit_code, parsed.result, stderr);
                 }
 
                 Ok(parsed)

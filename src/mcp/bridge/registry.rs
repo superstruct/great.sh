@@ -264,8 +264,7 @@ impl TaskRegistry {
                     json["usage"] = serde_json::to_value(usage).unwrap_or_default();
                 }
                 if !p.tool_usage.is_empty() {
-                    json["tool_usage"] =
-                        serde_json::to_value(&p.tool_usage).unwrap_or_default();
+                    json["tool_usage"] = serde_json::to_value(&p.tool_usage).unwrap_or_default();
                 }
             }
         }
@@ -392,9 +391,7 @@ impl TaskRegistry {
 
     fn snapshot(&self, handle: &TaskHandle) -> TaskSnapshot {
         let (status, exit_code, stdout, stderr, duration_ms, session_id) = match &handle.state {
-            TaskState::Running { .. } => {
-                ("running".to_string(), None, None, None, None, None)
-            }
+            TaskState::Running { .. } => ("running".to_string(), None, None, None, None, None),
             TaskState::Completed {
                 exit_code,
                 stdout,
