@@ -146,8 +146,8 @@ pub struct CommandSpec {
     pub stdin_prompt: Option<String>,
 }
 
-/// Byte threshold above which prompts are delivered via stdin instead of CLI
-/// arg to avoid OS `ARG_MAX` limits. ~100K chars ≈ 100 KB.
+/// Byte threshold above which prompts are delivered via stdin for backends
+/// that support stdin prompt input (currently codex). ~100K chars ≈ 100 KB.
 const STDIN_PROMPT_THRESHOLD: usize = 100_000;
 
 /// Build the command arguments for invoking a backend with a prompt.
@@ -210,6 +210,9 @@ pub fn build_command_args(
         if final_prompt.len() > STDIN_PROMPT_THRESHOLD {
             stdin_prompt = Some(final_prompt);
         } else {
+            // Use `--` to prevent prompt content from being parsed as flags
+            // (e.g. file content starting with `---`)
+            args.push("--".to_string());
             args.push(final_prompt);
         }
     } else {
@@ -263,9 +266,14 @@ pub fn build_command_args(
             prompt.to_string()
         };
         if final_prompt.len() > STDIN_PROMPT_THRESHOLD {
-            // Placeholder arg for -p; actual prompt comes via stdin
-            args.push("(prompt via stdin)".to_string());
-            stdin_prompt = Some(final_prompt);
+            // claude/gemini/grok require a positional value for -p. Feeding stdin
+            // here produces incorrect results because the backend reads the -p arg.
+            // Keep the prompt as an argument for correctness.
+            tracing::warn!(
+                "prompt exceeds threshold for backend '{}'; passing via argv",
+                backend.name
+            );
+            args.push(final_prompt);
         } else if final_prompt.starts_with('-') {
             args.push(format!(" {}", final_prompt));
         } else {
@@ -374,7 +382,10 @@ mod tests {
         let backend = make_backend("codex");
         let spec = build_command_args(&backend, "hello", None, None, true, None);
         assert_eq!(spec.binary, "/usr/bin/codex");
-        assert_eq!(spec.args, vec!["exec", "--full-auto", "--json", "hello"]);
+        assert_eq!(
+            spec.args,
+            vec!["exec", "--full-auto", "--json", "--", "hello"]
+        );
     }
 
     #[test]
@@ -441,12 +452,21 @@ mod tests {
     }
 
     #[test]
-    fn test_build_command_args_stdin_for_long_prompt() {
-        let backend = make_backend("claude");
+    fn test_build_command_args_stdin_for_long_prompt_codex() {
+        let backend = make_backend("codex");
         let long_prompt = "x".repeat(STDIN_PROMPT_THRESHOLD + 1);
         let spec = build_command_args(&backend, &long_prompt, None, None, true, None);
         assert!(spec.stdin_prompt.is_some());
         assert_eq!(spec.stdin_prompt.as_ref().unwrap().len(), long_prompt.len());
+    }
+
+    #[test]
+    fn test_build_command_args_no_stdin_for_long_prompt_claude() {
+        let backend = make_backend("claude");
+        let long_prompt = "x".repeat(STDIN_PROMPT_THRESHOLD + 1);
+        let spec = build_command_args(&backend, &long_prompt, None, None, true, None);
+        assert!(spec.stdin_prompt.is_none());
+        assert_eq!(spec.args.last(), Some(&long_prompt));
     }
 
     #[test]
