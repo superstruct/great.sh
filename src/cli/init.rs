@@ -221,6 +221,23 @@ pub fn run(args: Args) -> Result<()> {
         config.mcp = Some(mcps);
     }
 
+    // MCP Bridge section
+    eprintln!();
+    output::header("MCP Bridge");
+    eprintln!();
+
+    if prompt_yes_no(
+        "Enable built-in MCP bridge (routes MCP servers to all AI agents)?",
+        false,
+    )? {
+        config.mcp_bridge = Some(McpBridgeConfig {
+            preset: Some("minimal".to_string()),
+            ..Default::default()
+        });
+        output::success("MCP bridge enabled with 'minimal' preset");
+        output::info("  Change preset in great.toml: minimal, agent, research, full");
+    }
+
     // Secrets section
     eprintln!();
     output::header("Secrets");
@@ -453,6 +470,55 @@ mod tests {
                 name
             );
         }
+    }
+
+    #[test]
+    fn test_templates_have_mcp_bridge() {
+        let templates: &[(&str, &str, &str)] = &[
+            (
+                "ai-minimal",
+                include_str!("../../templates/ai-minimal.toml"),
+                "minimal",
+            ),
+            (
+                "ai-fullstack-ts",
+                include_str!("../../templates/ai-fullstack-ts.toml"),
+                "agent",
+            ),
+            (
+                "ai-fullstack-py",
+                include_str!("../../templates/ai-fullstack-py.toml"),
+                "agent",
+            ),
+            (
+                "saas-multi-tenant",
+                include_str!("../../templates/saas-multi-tenant.toml"),
+                "full",
+            ),
+        ];
+        for (name, content, expected_preset) in templates {
+            let config: GreatConfig = toml::from_str(content)
+                .unwrap_or_else(|e| panic!("template '{}' failed to parse: {}", name, e));
+            let bridge = config.mcp_bridge.unwrap_or_else(|| {
+                panic!("template '{}' should have a [mcp-bridge] section", name)
+            });
+            assert_eq!(
+                bridge.preset.as_deref(),
+                Some(*expected_preset),
+                "template '{}' should have preset '{}'",
+                name,
+                expected_preset
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_config_has_no_mcp_bridge() {
+        let config = GreatConfig::default();
+        assert!(
+            config.mcp_bridge.is_none(),
+            "default config should not have mcp_bridge (opt-in only)"
+        );
     }
 
     #[test]

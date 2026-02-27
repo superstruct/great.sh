@@ -11,3 +11,6 @@ model = "claude-sonnet-4-20250514"
 [secrets]
 provider = "env"
 required = ["ANTHROPIC_API_KEY"]
+
+[mcp-bridge]
+preset = "minimal"

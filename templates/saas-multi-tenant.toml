@@ -32,3 +32,6 @@ required = ["ANTHROPIC_API_KEY", "HASURA_ADMIN_SECRET"]
 
 [platform.macos]
 extra_tools = ["coreutils"]
+
+[mcp-bridge]
+preset = "full"

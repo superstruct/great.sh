@@ -25,3 +25,6 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
 [secrets]
 provider = "env"
 required = ["ANTHROPIC_API_KEY"]
+
+[mcp-bridge]
+preset = "agent"
