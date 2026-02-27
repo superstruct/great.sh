@@ -172,6 +172,11 @@ pub struct McpBridgeConfig {
     /// Paths are canonicalized at startup; relative paths are resolved from cwd.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_dirs: Option<Vec<String>>,
+
+    /// How long (in seconds) to keep completed/failed tasks before auto-cleanup.
+    /// Default: 1800 (30 minutes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanup_ttl_secs: Option<u64>,
 }
 
 /// A validation message produced by [`GreatConfig::validate`].

@@ -139,8 +139,14 @@ pub fn run(args: Args) -> Result<()> {
             .join(", ")
     );
 
+    let cleanup_ttl_secs = bridge_config
+        .as_ref()
+        .and_then(|c| c.cleanup_ttl_secs)
+        .unwrap_or(30 * 60);
+
     // Create registry and start the server
-    let registry = TaskRegistry::new(timeout_secs, auto_approve);
+    let registry = TaskRegistry::new(timeout_secs, auto_approve)
+        .with_cleanup_ttl(std::time::Duration::from_secs(cleanup_ttl_secs));
 
     // Build and run the tokio runtime (third-site pattern, same as update.rs)
     let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
