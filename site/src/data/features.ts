@@ -20,7 +20,7 @@ export const features: Feature[] = [
   {
     title: 'MCP Server Management',
     description:
-      'Install, configure, and credential-inject MCP servers from the official registry. Health checks, cross-client config sync, curated bundles.',
+      'Install, configure, and credential-inject external MCP servers from the official registry. Health checks, cross-client config sync, and curated bundles for third-party tools.',
     icon: 'server',
   },
   {
@@ -28,5 +28,11 @@ export const features: Feature[] = [
     description:
       'Zero-knowledge encrypted vault syncs API keys and config across machines. BYO credentials \u2014 we never see your keys.',
     icon: 'shield',
+  },
+  {
+    title: 'Built-in AI Bridge',
+    description:
+      'Use Claude Code to call Gemini, Codex, Grok, or Ollama — all from one bridge that ships inside the great binary. No Node.js dependency, no extra install.',
+    icon: 'bridge',
   },
 ]

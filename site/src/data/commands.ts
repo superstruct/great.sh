@@ -68,6 +68,10 @@ transport = "stdio"
 source = "registry:modelcontextprotocol/server-memory"
 transport = "stdio"
 
+[mcp-bridge]
+preset = "agent"
+default-backend = "gemini"
+
 [secrets]
 provider = "great-vault"
 required = [
@@ -90,3 +94,17 @@ export const loopInstallOutput = `$ great loop install --project
 
   16 roles: 4 teammates + 11 subagents + 1 team lead
   Usage: claude -> /loop [task description]`
+
+export const mcpBridgeOutput = `$ great mcp-bridge --preset agent
+
+  great.sh MCP Bridge — Starting (preset: agent)
+
+  Discovering backends...
+  [check] Gemini CLI    gemini (GEMINI_API_KEY set)
+  [check] Codex CLI     codex  (OPENAI_API_KEY set)
+  [check] Claude CLI    claude (logged in)
+
+  Preset: agent (6 tools)
+  Tools: prompt, run, wait, list_tasks, get_result, kill_task
+
+  Listening on stdio (JSON-RPC 2.0)`

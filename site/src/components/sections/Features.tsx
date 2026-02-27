@@ -1,7 +1,7 @@
 import { AnimatedSection } from '@/components/shared/AnimatedSection'
 import { Container } from '@/components/layout/Container'
 import { features } from '@/data/features'
-import { Terminal, BrainCircuit, Server, ShieldCheck } from 'lucide-react'
+import { Terminal, BrainCircuit, Server, ShieldCheck, Cable } from 'lucide-react'
 import { motion } from 'motion/react'
 
 const iconMap = {
@@ -9,6 +9,7 @@ const iconMap = {
   brain: BrainCircuit,
   server: Server,
   shield: ShieldCheck,
+  bridge: Cable,
 }
 
 export function Features() {
@@ -33,7 +34,9 @@ export function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-50px' }}
                 transition={{ duration: 0.4, delay: i * 0.1 }}
-                className="bg-bg-secondary border border-border rounded-xl p-8 hover:border-accent/30 transition-colors"
+                className={`bg-bg-secondary border border-border rounded-xl p-8 hover:border-accent/30 transition-colors${
+                  i === features.length - 1 && features.length % 2 !== 0 ? ' md:col-span-2 md:max-w-lg md:mx-auto' : ''
+                }`}
               >
                 <div className="w-10 h-10 rounded-lg bg-accent-muted flex items-center justify-center mb-4">
                   <Icon size={20} className="text-accent" />

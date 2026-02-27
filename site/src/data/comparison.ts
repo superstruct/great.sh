@@ -55,6 +55,15 @@ export const comparisonData: ComparisonRow[] = [
     manual: true,
   },
   {
+    feature: 'Built-in multi-AI bridge (no Node.js)',
+    great: true,
+    chezmoi: false,
+    mise: false,
+    nix: false,
+    mcpm: false,
+    manual: false,
+  },
+  {
     feature: 'Credential management',
     great: true,
     chezmoi: 'Partial',
