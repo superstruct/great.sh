@@ -301,8 +301,7 @@ fn cleanup_stale_sessions() {
         return;
     };
 
-    let cutoff = SystemTime::now()
-        .checked_sub(std::time::Duration::from_secs(24 * 60 * 60));
+    let cutoff = SystemTime::now().checked_sub(std::time::Duration::from_secs(24 * 60 * 60));
     let Some(cutoff) = cutoff else {
         return;
     };

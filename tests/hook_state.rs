@@ -12,8 +12,8 @@ fn test_hook_writes_state_and_statusline_reads_it() {
     let _ = std::fs::remove_dir_all(&state_dir);
 
     // Find the hook script (built from source)
-    let hook_script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("loop/hooks/update-state.sh");
+    let hook_script =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("loop/hooks/update-state.sh");
 
     if !hook_script.exists() {
         eprintln!(

@@ -408,8 +408,7 @@ pub fn run(args: Args) -> Result<()> {
     let needs_sudo = !args.dry_run && {
         let needs_homebrew = match &info.platform {
             platform::Platform::MacOS { .. } => true,
-            platform::Platform::Linux { distro, .. }
-            | platform::Platform::Wsl { distro, .. } => {
+            platform::Platform::Linux { distro, .. } | platform::Platform::Wsl { distro, .. } => {
                 matches!(
                     distro,
                     platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
