@@ -151,8 +151,27 @@ pub fn build_command_args(
             .unwrap_or_else(|| "llama3.2".to_string());
         args.push(model);
         args.push(prompt.to_string());
+    } else if backend.name == "codex" {
+        // codex exec [OPTIONS] [PROMPT] — non-interactive mode with positional prompt
+        args.push("exec".to_string());
+        if auto_approve {
+            if let Some(flag) = backend.auto_approve_flag {
+                args.push(flag.to_string());
+            }
+        }
+        if let Some(m) = model_override.or(backend.model.as_deref()) {
+            args.push("--model".to_string());
+            args.push(m.to_string());
+        }
+        // System prompt prepended (codex has no native --system-prompt)
+        if let Some(sp) = system_prompt {
+            args.push(format!("SYSTEM: {}\n\nTASK: {}", sp, prompt));
+        } else {
+            args.push(prompt.to_string());
+        }
     } else {
-        // Standard pattern: [binary] [auto_approve_flag] [-p prompt]
+        // Standard pattern: [binary] [auto_approve_flag] -p <prompt>
+        // Used by gemini, claude, grok.
         if auto_approve {
             if let Some(flag) = backend.auto_approve_flag {
                 args.push(flag.to_string());
@@ -171,15 +190,22 @@ pub fn build_command_args(
             args.push(m.to_string());
         }
         args.push("-p".to_string());
-        // For backends without native system prompt support, prepend it
-        if let Some(sp) = system_prompt {
+        // For backends without native system prompt support, prepend it.
+        // Prefix with a space if the prompt starts with '-' to prevent
+        // yargs-based CLIs (gemini) from misinterpreting it as a flag.
+        let final_prompt = if let Some(sp) = system_prompt {
             if backend.name != "claude" {
-                args.push(format!("SYSTEM: {}\n\nTASK: {}", sp, prompt));
+                format!("SYSTEM: {}\n\nTASK: {}", sp, prompt)
             } else {
-                args.push(prompt.to_string());
+                prompt.to_string()
             }
         } else {
-            args.push(prompt.to_string());
+            prompt.to_string()
+        };
+        if final_prompt.starts_with('-') {
+            args.push(format!(" {}", final_prompt));
+        } else {
+            args.push(final_prompt);
         }
     }
 
@@ -278,6 +304,54 @@ mod tests {
         assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"hello".to_string()));
+    }
+
+    #[test]
+    fn test_build_command_args_codex() {
+        let backend = BackendConfig {
+            name: "codex",
+            display_name: "Codex CLI",
+            binary: "/usr/bin/codex".to_string(),
+            model: None,
+            auto_approve_flag: Some("--full-auto"),
+            api_key_env: Some("OPENAI_API_KEY"),
+        };
+        let (bin, args) = build_command_args(&backend, "hello", None, None, true);
+        assert_eq!(bin, "/usr/bin/codex");
+        assert_eq!(args, vec!["exec", "--full-auto", "hello"]);
+    }
+
+    #[test]
+    fn test_build_command_args_codex_with_system_prompt() {
+        let backend = BackendConfig {
+            name: "codex",
+            display_name: "Codex CLI",
+            binary: "/usr/bin/codex".to_string(),
+            model: None,
+            auto_approve_flag: Some("--full-auto"),
+            api_key_env: Some("OPENAI_API_KEY"),
+        };
+        let (_, args) = build_command_args(&backend, "task", None, Some("You are helpful"), true);
+        assert_eq!(args[0], "exec");
+        assert!(args.last().unwrap().contains("SYSTEM: You are helpful"));
+        assert!(args.last().unwrap().contains("TASK: task"));
+    }
+
+    #[test]
+    fn test_build_command_args_dash_prefix_escaped() {
+        let backend = BackendConfig {
+            name: "gemini",
+            display_name: "Gemini CLI",
+            binary: "/usr/bin/gemini".to_string(),
+            model: None,
+            auto_approve_flag: Some("-y"),
+            api_key_env: Some("GEMINI_API_KEY"),
+        };
+        let (_, args) = build_command_args(&backend, "--- FILE: test ---\ncontent", None, None, true);
+        // Prompt should be space-prefixed to avoid yargs misinterpreting leading dashes
+        let prompt_arg = args.last().unwrap();
+        assert!(prompt_arg.starts_with(' '));
+        assert!(prompt_arg.contains("--- FILE: test ---"));
     }
 
     #[test]
