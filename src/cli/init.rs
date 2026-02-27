@@ -12,7 +12,7 @@ use crate::platform;
 /// Arguments for the `great init` subcommand.
 #[derive(ClapArgs)]
 pub struct Args {
-    /// Template to initialize from (ai-fullstack-ts, ai-fullstack-py, ai-minimal)
+    /// Template to initialize from (ai-fullstack-ts, ai-fullstack-py, ai-minimal, saas-multi-tenant)
     #[arg(long)]
     pub template: Option<String>,
 
@@ -230,12 +230,21 @@ pub fn run(args: Args) -> Result<()> {
         "Enable built-in MCP bridge (routes MCP servers to all AI agents)?",
         false,
     )? {
+        // Preset heuristic is agent-count-based (wizard context).
+        // Templates use complexity-based presets (fullstack projects get "agent"
+        // even with a single agent). These semantics differ intentionally —
+        // do not "fix" one to match the other.
+        let preset = if config.agents.as_ref().map_or(0, |a| a.len()) > 1 {
+            "agent"
+        } else {
+            "minimal"
+        };
         config.mcp_bridge = Some(McpBridgeConfig {
-            preset: Some("minimal".to_string()),
+            preset: Some(preset.to_string()),
             ..Default::default()
         });
-        output::success("MCP bridge enabled with 'minimal' preset");
-        output::info("  Change preset in great.toml: minimal, agent, research, full");
+        output::success(&format!("MCP bridge enabled with {} preset", preset));
+        output::info("  Presets: minimal (1 tool) | agent (6 tools) | research (8 tools) | full (9 tools)");
     }
 
     // Secrets section
