@@ -1,0 +1,109 @@
+{
+  "recorded": "2026-02-28",
+  "task": "Task 0034 — pre-implementation baseline (mcp-bridge init wizard + templates)",
+  "git_commit": "79e96a5 (HEAD main — style: fix cargo fmt formatting in mcp bridge and doctor modules)",
+  "artifact": {
+    "path": "target/release/great",
+    "size_bytes": 8971264,
+    "size_human": "8.556 MiB",
+    "profile": {
+      "lto": true,
+      "strip": true,
+      "codegen-units": 1
+    }
+  },
+  "previous_baseline": {
+    "recorded": "2026-02-28",
+    "task": "Task 0030 — MCP Bridge Hardening (Item E: LTO+strip+codegen-units=1 applied)",
+    "size_bytes": 8957728,
+    "size_human": "8.543 MiB",
+    "delta_bytes": 13536,
+    "delta_pct": "+0.151%",
+    "note": "Incremental drift between task 0030 and task 0034 pre-baseline. Within noise range."
+  },
+  "build_time": {
+    "cold_release_s": 62.2,
+    "note": "Full LTO cold build (re-timed 2026-02-28). Subsequent incremental builds ~1-2s."
+  },
+  "test_suite": {
+    "unit_tests": 231,
+    "integration_tests": 98,
+    "hook_state_tests": 1,
+    "total": 330,
+    "ignored": 1,
+    "wall_time_ms": 1778,
+    "result": "all passed"
+  },
+  "template_sizes_bytes": {
+    "ai-fullstack-py.toml": 420,
+    "ai-fullstack-ts.toml": 462,
+    "ai-minimal.toml": 226,
+    "saas-multi-tenant.toml": 722,
+    "total": 1830
+  },
+  "target_threshold_bytes": 13107200,
+  "target_threshold_human": "12.5 MiB",
+  "headroom_bytes": 4135936,
+  "headroom_human": "3.944 MiB",
+  "dependencies": {
+    "runtime": [
+      "clap 4.5",
+      "anyhow 1.0",
+      "serde 1.0",
+      "serde_json 1.0",
+      "toml 0.8",
+      "tokio 1.0",
+      "reqwest 0.12",
+      "zip 2",
+      "dirs 6.0",
+      "colored 3.0",
+      "indicatif 0.17",
+      "regex 1.0",
+      "toml_edit 0.22",
+      "semver 1.0",
+      "which 7",
+      "rmcp 0.16",
+      "uuid 1",
+      "tracing 0.1",
+      "tracing-subscriber 0.3",
+      "schemars 1.0",
+      "libc 0.2 (unix only)"
+    ],
+    "dev": [
+      "assert_cmd 2.0",
+      "predicates 3.0",
+      "tempfile 3.0"
+    ],
+    "new_in_0034": "none expected — S-complexity text/config change only"
+  },
+  "duplicates": {
+    "getrandom": ["0.2.17 (ring)", "0.3.4 (zip)", "0.4.1 (uuid, tempfile)"],
+    "note": "Pre-existing triple getrandom. Unavoidable — ring/zip/uuid have incompatible version requirements."
+  },
+  "compiler_warnings": [
+    "DEPRECATED: assert_cmd::Command::cargo_bin in tests/cli_smoke.rs — pre-existing, not a regression"
+  ],
+  "site_bundle": {
+    "recorded": "2026-02-28",
+    "task": "Task 0036 — site-only content changes (first formal site baseline)",
+    "vite_version": "7.3.1",
+    "js_bundle_kb": 326.02,
+    "js_bundle_gzip_kb": 104.16,
+    "css_kb": 15.36,
+    "css_gzip_kb": 3.80,
+    "modules_transformed": 2046,
+    "build_time_s": 2.06,
+    "wall_time_s": 3.80,
+    "previous_informal_baseline": {
+      "source": "iter-030 memory",
+      "js_bundle_kb": 326.03,
+      "js_bundle_gzip_kb": 104.17,
+      "delta_kb": -0.01,
+      "delta_pct": "-0.003%",
+      "verdict": "PASS — sub-byte rounding noise, content-only edit confirmed"
+    },
+    "threshold_warn_pct": 5,
+    "threshold_block_pct": 10
+  },
+  "notes": "Pre-task-0034 baseline. 13,536-byte increase from task 0030 baseline is within noise. 12.5 MiB target met with 3.944 MiB headroom. Task 0034 is S-complexity (55 lines text/config); binary delta expected < 1 KB; no new dependencies expected. Site bundle formally baselined at task 0036: 326.02 kB JS (gzip: 104.16 kB)."
+}
