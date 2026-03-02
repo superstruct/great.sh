@@ -39,9 +39,6 @@ dist-ssr
 # Claude Code agent memory
 .claude/
 
-# great.sh Loop working state
-.tasks/
-
 # CDK synthesized output
 infra/cdk/cdk.out/
 
