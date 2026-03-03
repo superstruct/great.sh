@@ -35,6 +35,22 @@ claude
 | `great template` | Manage configuration templates |
 | `great loop` | Install and manage the great.sh Loop agent team |
 
+## MCP Bridge
+
+The `great mcp-bridge` command runs an MCP server that routes to multiple AI backends (Gemini, Codex, Claude, Grok, Ollama).
+
+Add it to Claude Code for the current project:
+
+```sh
+claude mcp add great-bridge -- great mcp-bridge
+```
+
+Or add it globally (all projects):
+
+```sh
+claude mcp add --scope user great-bridge -- great mcp-bridge
+```
+
 ## The great.sh Loop
 
 A 15-role AI agent orchestration methodology. Each role is embodied by a historical figure whose expertise maps to the task.
