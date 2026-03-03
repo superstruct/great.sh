@@ -165,8 +165,13 @@ pub fn detect_capabilities(_platform: &Platform) -> PlatformCapabilities {
 
 /// Returns `true` when running inside Windows Subsystem for Linux (WSL1 or WSL2).
 ///
-/// Three-tier detection: environment variable, WSLInterop file, /proc/version.
+/// Returns `false` immediately if a container is detected. Otherwise uses
+/// three-tier detection: environment variable, WSLInterop file, /proc/version.
 fn is_wsl() -> bool {
+    if is_container() {
+        return false;
+    }
+
     if std::env::var("WSL_DISTRO_NAME").is_ok() {
         return true;
     }
@@ -182,10 +187,37 @@ fn is_wsl() -> bool {
 
 /// Returns `true` only when running inside WSL2 (not WSL1).
 ///
-/// Detection: `/proc/sys/fs/binfmt_misc/WSLInterop` file exists in WSL2 but
-/// is absent in WSL1.
+/// Returns `false` immediately if a container is detected. Otherwise checks
+/// whether `/proc/sys/fs/binfmt_misc/WSLInterop` exists (present in WSL2,
+/// absent in WSL1).
 fn is_wsl2() -> bool {
+    if is_container() {
+        return false;
+    }
+
     std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+}
+
+/// Returns `true` when running inside a container (Docker, Podman, etc.).
+///
+/// Checks four indicators in priority order: /.dockerenv file, DOCKER_CONTAINER
+/// env var, container env var (OCI standard), and /proc/1/cgroup contents.
+fn is_container() -> bool {
+    if std::path::Path::new("/.dockerenv").exists() {
+        return true;
+    }
+
+    if std::env::var("DOCKER_CONTAINER").is_ok() {
+        return true;
+    }
+
+    if std::env::var("container").is_ok() {
+        return true;
+    }
+
+    std::fs::read_to_string("/proc/1/cgroup")
+        .map(|c| c.contains("docker"))
+        .unwrap_or(false)
 }
 
 /// Parse the `ID=` field from `/etc/os-release` into a `LinuxDistro`.
@@ -300,7 +332,31 @@ trait OsProbe {
 }
 
 #[cfg(test)]
+fn is_container_with_probe(probe: &dyn OsProbe) -> bool {
+    if probe.path_exists("/.dockerenv") {
+        return true;
+    }
+
+    if probe.env_var("DOCKER_CONTAINER").is_some() {
+        return true;
+    }
+
+    if probe.env_var("container").is_some() {
+        return true;
+    }
+
+    probe
+        .read_file("/proc/1/cgroup")
+        .map(|c| c.contains("docker"))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
 fn is_wsl_with_probe(probe: &dyn OsProbe) -> bool {
+    if is_container_with_probe(probe) {
+        return false;
+    }
+
     if probe.env_var("WSL_DISTRO_NAME").is_some() {
         return true;
     }
@@ -317,6 +373,10 @@ fn is_wsl_with_probe(probe: &dyn OsProbe) -> bool {
 
 #[cfg(test)]
 fn is_wsl2_with_probe(probe: &dyn OsProbe) -> bool {
+    if is_container_with_probe(probe) {
+        return false;
+    }
+
     probe.path_exists("/proc/sys/fs/binfmt_misc/WSLInterop")
 }
 
@@ -599,5 +659,166 @@ mod tests {
     fn test_detect_shell_unset() {
         let probe = MockProbe::new();
         assert_eq!(detect_shell_with_probe(&probe), "unknown");
+    }
+
+    // -----------------------------------------------------------------------
+    // Container detection tests (tests 25-36)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_container_detected_from_dockerenv() {
+        let mut probe = MockProbe::new();
+        probe.paths.insert("/.dockerenv".into(), true);
+        assert!(is_container_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_container_detected_from_docker_container_env() {
+        let mut probe = MockProbe::new();
+        probe
+            .env_vars
+            .insert("DOCKER_CONTAINER".into(), "true".into());
+        assert!(is_container_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_container_detected_from_container_env() {
+        let mut probe = MockProbe::new();
+        probe
+            .env_vars
+            .insert("container".into(), "podman".into());
+        assert!(is_container_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_container_detected_from_cgroup() {
+        let mut probe = MockProbe::new();
+        probe.files.insert(
+            "/proc/1/cgroup".into(),
+            "12:memory:/docker/abc123def456\n11:cpuset:/docker/abc123def456\n".into(),
+        );
+        assert!(is_container_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_not_container_when_no_indicators() {
+        let probe = MockProbe::new();
+        assert!(!is_container_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl_false_when_dockerenv_present() {
+        let mut probe = MockProbe::new();
+        // WSL indicators
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.files.insert(
+            "/proc/version".into(),
+            "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
+        );
+        // Container indicator
+        probe.paths.insert("/.dockerenv".into(), true);
+
+        assert!(!is_wsl_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl_false_when_container_env_set() {
+        let mut probe = MockProbe::new();
+        // WSL indicators -- all three tiers
+        probe
+            .env_vars
+            .insert("WSL_DISTRO_NAME".into(), "Ubuntu".into());
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.files.insert(
+            "/proc/version".into(),
+            "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
+        );
+        // Container indicator
+        probe
+            .env_vars
+            .insert("container".into(), "podman".into());
+
+        assert!(!is_wsl_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl_false_when_docker_container_env_set() {
+        let mut probe = MockProbe::new();
+        // WSL indicators
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.files.insert(
+            "/proc/version".into(),
+            "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
+        );
+        // Container indicator
+        probe
+            .env_vars
+            .insert("DOCKER_CONTAINER".into(), "1".into());
+
+        assert!(!is_wsl_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl_true_genuine_wsl2_no_container() {
+        let mut probe = MockProbe::new();
+        probe
+            .env_vars
+            .insert("WSL_DISTRO_NAME".into(), "Ubuntu".into());
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.files.insert(
+            "/proc/version".into(),
+            "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
+        );
+
+        assert!(is_wsl_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl2_false_when_container_detected() {
+        let mut probe = MockProbe::new();
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.paths.insert("/.dockerenv".into(), true);
+
+        assert!(!is_wsl2_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl2_true_genuine_wsl2_no_container() {
+        let mut probe = MockProbe::new();
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+
+        assert!(is_wsl2_with_probe(&probe));
+    }
+
+    #[test]
+    fn test_wsl_false_when_cgroup_contains_docker() {
+        let mut probe = MockProbe::new();
+        // WSL indicators
+        probe
+            .paths
+            .insert("/proc/sys/fs/binfmt_misc/WSLInterop".into(), true);
+        probe.files.insert(
+            "/proc/version".into(),
+            "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
+        );
+        // Only the cgroup indicator
+        probe.files.insert(
+            "/proc/1/cgroup".into(),
+            "0::/docker/abc123\n".into(),
+        );
+
+        assert!(!is_wsl_with_probe(&probe));
     }
 }
