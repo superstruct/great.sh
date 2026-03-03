@@ -11,6 +11,13 @@ use clap::Parser;
 use cli::{Cli, Command};
 
 fn main() -> Result<()> {
+    // Restore default SIGPIPE handling so piped commands (e.g. `great status --json | head`)
+    // terminate cleanly instead of exiting with a BrokenPipe error through anyhow.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let cli = Cli::parse();
     let non_interactive = cli.non_interactive;
 

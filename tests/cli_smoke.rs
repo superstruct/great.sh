@@ -2045,3 +2045,61 @@ fn mcp_bridge_no_backends_emits_warning() {
         stderr,
     );
 }
+
+// -----------------------------------------------------------------------
+// SIGPIPE regression test (regression for: great status --json | head panic)
+// -----------------------------------------------------------------------
+
+/// Regression test: verify that piping `great` output to a consumer that
+/// closes early does NOT produce a "BrokenPipe" error on stderr.
+///
+/// Prior to the fix, Rust's default SIGPIPE=SIG_IGN caused write() to return
+/// EPIPE, which propagated up as an anyhow error and printed to stderr.
+/// The fix in main.rs calls libc::signal(SIGPIPE, SIG_DFL) so the process
+/// receives SIGPIPE and terminates silently.
+///
+/// This test exercises the scenario by running `great --help` and checking
+/// that stderr is clean even though the process exits on SIGPIPE.
+#[cfg(unix)]
+#[test]
+fn sigpipe_no_broken_pipe_on_stderr() {
+    use std::io::Read;
+    use std::process::{Command as StdCommand, Stdio};
+
+    // Build the great binary path via the assert_cmd macro (avoids deprecated cargo_bin fn).
+    let bin = assert_cmd::cargo::cargo_bin!("great");
+
+    // Spawn great --help with piped stdout; we intentionally drop the
+    // stdout reader immediately to provoke SIGPIPE.
+    let mut child = StdCommand::new(&bin)
+        .arg("--help")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn great --help");
+
+    // Drop stdout immediately — this closes the read end of the pipe.
+    // The next write() in the child will get EPIPE / SIGPIPE.
+    drop(child.stdout.take());
+
+    let status = child.wait().expect("failed to wait");
+
+    // Collect stderr
+    let mut stderr_bytes = Vec::new();
+    if let Some(mut se) = child.stderr.take() {
+        se.read_to_end(&mut stderr_bytes).ok();
+    }
+    let stderr = String::from_utf8_lossy(&stderr_bytes);
+
+    // The process should not print a BrokenPipe error.
+    assert!(
+        !stderr.contains("BrokenPipe") && !stderr.contains("Broken pipe"),
+        "SIGPIPE regression: got BrokenPipe on stderr.\nstatus={}\nstderr={}",
+        status,
+        stderr,
+    );
+
+    // On Unix with SIG_DFL, the process is killed by SIGPIPE (exit code !=0
+    // due to signal) OR it finishes before we close stdout and exits 0.
+    // Either is acceptable — the key invariant is no BrokenPipe message.
+}
