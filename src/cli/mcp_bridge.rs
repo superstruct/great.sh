@@ -125,19 +125,20 @@ pub fn run(args: Args) -> Result<()> {
     // Discover backends
     let backends = discover_backends(&backend_filter);
     if backends.is_empty() {
-        anyhow::bail!(
-            "no AI CLI backends found on PATH. Install at least one of: gemini, codex, claude, grok, ollama"
+        tracing::warn!(
+            "No AI CLI backends found on PATH; bridge starting in degraded mode. \
+             Install at least one of: gemini, codex, claude, grok, ollama"
+        );
+    } else {
+        tracing::info!(
+            "Discovered backends: {}",
+            backends
+                .iter()
+                .map(|b| b.name)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
-
-    tracing::info!(
-        "Discovered backends: {}",
-        backends
-            .iter()
-            .map(|b| b.name)
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
 
     let cleanup_ttl_secs = bridge_config
         .as_ref()

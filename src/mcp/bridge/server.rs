@@ -20,6 +20,11 @@ const MAX_RESPONSE_CHARS: usize = 80_000;
 /// Maximum bytes to read from a single file for the `research` tool.
 const MAX_FILE_BYTES: usize = 100 * 1024; // 100 KiB
 
+/// Human-readable error message returned by tool calls when no backends are available.
+const NO_BACKENDS_MSG: &str =
+    "No AI CLI backends found. Install at least one of: gemini, codex, claude, grok, ollama. \
+     Run `great doctor` to check backend availability.";
+
 /// The MCP bridge server handler.
 ///
 /// This struct is the rmcp `ServerHandler` implementation. It holds shared
@@ -369,6 +374,16 @@ impl ServerHandler for GreatBridge {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        // When no backends are available, return an empty tools list.
+        // MCP clients will see zero capabilities but maintain a valid connection.
+        if self.backends.is_empty() {
+            return std::future::ready(Ok(ListToolsResult {
+                meta: None,
+                tools: vec![],
+                next_cursor: None,
+            }));
+        }
+
         let allowed = self.preset.tool_names();
         let all_tools = self.tool_router.list_all();
         let filtered: Vec<Tool> = all_tools
@@ -390,6 +405,12 @@ impl ServerHandler for GreatBridge {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
+        // When no backends are available, return a tool-level error rather than
+        // routing to a handler that will fail on resolve_backend().
+        if self.backends.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(NO_BACKENDS_MSG)]));
+        }
+
         let context = ToolCallContext::new(self, request, context);
         self.tool_router.call(context).await
     }

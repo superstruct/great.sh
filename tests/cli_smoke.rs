@@ -1968,3 +1968,80 @@ fn mcp_bridge_unknown_preset_shows_error_message() {
         .failure()
         .stderr(predicate::str::contains("invalid preset"));
 }
+
+/// Verify that `great mcp-bridge` starts and responds to `initialize` even when
+/// no AI CLI backends are on PATH. The bridge must NOT bail! with exit code 1.
+///
+/// We send an `initialize` request and then close stdin. The bridge should
+/// produce a valid JSON-RPC response on stdout and exit 0. The `tools/list`
+/// empty-array behavior is guaranteed by the `list_tools` guard in server.rs
+/// but cannot be reliably asserted here because the rmcp stdio transport may
+/// close before processing subsequent messages after stdin EOF.
+#[test]
+fn mcp_bridge_starts_without_backends() {
+    // Use a PATH with no AI CLI binaries to guarantee zero backends.
+    // Setting PATH to a minimal value ensures discover_backends returns empty.
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        "\n",
+    );
+
+    let output = great()
+        .args(["mcp-bridge", "--preset", "minimal", "--log-level", "off"])
+        .env("PATH", "/nonexistent")
+        .write_stdin(input)
+        .timeout(std::time::Duration::from_secs(10))
+        .output()
+        .expect("failed to execute mcp-bridge");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must exit successfully (not bail!)
+    assert!(
+        output.status.success(),
+        "mcp-bridge should exit 0 in degraded mode, got: {:?}\nstderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    // stdout must contain a valid initialize response with protocolVersion
+    assert!(
+        stdout.contains("protocolVersion"),
+        "initialize response missing protocolVersion. stdout: {}",
+        stdout,
+    );
+
+    // Verify it's valid JSON-RPC (has jsonrpc key and our server info)
+    assert!(
+        stdout.contains("great-mcp-bridge"),
+        "initialize response missing server name. stdout: {}",
+        stdout,
+    );
+}
+
+/// Verify that stderr contains a degraded-mode warning when no backends are found.
+#[test]
+fn mcp_bridge_no_backends_emits_warning() {
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}"#,
+        "\n",
+    );
+
+    let output = great()
+        .args(["mcp-bridge", "--preset", "minimal", "--log-level", "warn"])
+        .env("PATH", "/nonexistent")
+        .write_stdin(input)
+        .timeout(std::time::Duration::from_secs(10))
+        .output()
+        .expect("failed to execute mcp-bridge");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stderr.contains("degraded mode") || stderr.contains("No AI CLI backends"),
+        "stderr should contain degraded mode warning. stderr: {}",
+        stderr,
+    );
+}
