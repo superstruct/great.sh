@@ -123,6 +123,7 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     // -- Human-readable mode --------------------------------------------
+    let mut has_issues = false;
     output::header("great status");
     println!();
 
@@ -186,6 +187,9 @@ pub fn run(args: Args) -> Result<()> {
                     actual_version.as_deref(),
                     args.verbose,
                 );
+                if !installed {
+                    has_issues = true;
+                }
             }
 
             if let Some(cli_tools) = &tools.cli {
@@ -203,6 +207,9 @@ pub fn run(args: Args) -> Result<()> {
                         actual_version.as_deref(),
                         args.verbose,
                     );
+                    if !installed {
+                        has_issues = true;
+                    }
                 }
             }
         }
@@ -244,6 +251,7 @@ pub fn run(args: Args) -> Result<()> {
                     }
                 } else {
                     output::error(&format!("  {} ({} -- not found)", name, mcp.command));
+                    has_issues = true;
                 }
             }
         }
@@ -258,6 +266,7 @@ pub fn run(args: Args) -> Result<()> {
                         output::success(&format!("  {} -- set", key));
                     } else {
                         output::error(&format!("  {} -- missing", key));
+                        has_issues = true;
                     }
                 }
             }
@@ -265,6 +274,10 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     println!();
+
+    if has_issues {
+        output::info("Run `great doctor` for exit-code health checks in CI.");
+    }
 
     // Exit 0 regardless of issues found. The status command is informational:
     // missing tools/secrets are reported via colored output above, not via

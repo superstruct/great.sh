@@ -1955,7 +1955,8 @@ nonexistent-tool-xyz-9999 = "latest"
         .arg("status")
         .assert()
         .success()
-        .stderr(predicate::str::contains("not installed"));
+        .stderr(predicate::str::contains("not installed"))
+        .stderr(predicate::str::contains("great doctor"));
 }
 
 #[test]
@@ -1981,7 +1982,8 @@ required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
         .arg("status")
         .assert()
         .success()
-        .stderr(predicate::str::contains("missing"));
+        .stderr(predicate::str::contains("missing"))
+        .stderr(predicate::str::contains("great doctor"));
 }
 
 #[test]
@@ -2053,6 +2055,24 @@ fn status_no_config_exits_zero() {
         .arg("status")
         .assert()
         .success();
+}
+
+#[test]
+fn status_no_doctor_hint_when_clean() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    // Clean config: no tools, secrets, or MCP declared -- no hint expected.
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("great doctor").not());
 }
 
 #[test]
