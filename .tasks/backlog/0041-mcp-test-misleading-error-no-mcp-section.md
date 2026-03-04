@@ -3,7 +3,7 @@
 - **Priority:** P3
 - **Type:** bugfix
 - **Module:** `src/cli/mcp.rs` — `run_test()`
-- **Status:** backlog
+- **Status:** selected (iter 037)
 - **Estimated Complexity:** XS (single conditional, ~5 lines)
 
 ## Context

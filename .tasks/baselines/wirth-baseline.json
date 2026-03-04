@@ -1,11 +1,11 @@
 {
-  "recorded": "2026-02-28",
-  "task": "Task 0034 — pre-implementation baseline (mcp-bridge init wizard + templates)",
-  "git_commit": "79e96a5 (HEAD main — style: fix cargo fmt formatting in mcp bridge and doctor modules)",
+  "recorded": "2026-03-04",
+  "task": "Task 0041 — MCP test command guard (check preceding baseline for details)",
+  "git_commit": "main (mcp test command boolean guard: && name.is_none())",
   "artifact": {
     "path": "target/release/great",
-    "size_bytes": 8971264,
-    "size_human": "8.556 MiB",
+    "size_bytes": 9037376,
+    "size_human": "8.619 MiB",
     "profile": {
       "lto": true,
       "strip": true,
@@ -13,38 +13,40 @@
     }
   },
   "previous_baseline": {
-    "recorded": "2026-02-28",
-    "task": "Task 0030 — MCP Bridge Hardening (Item E: LTO+strip+codegen-units=1 applied)",
-    "size_bytes": 8957728,
-    "size_human": "8.543 MiB",
-    "delta_bytes": 13536,
-    "delta_pct": "+0.151%",
-    "note": "Incremental drift between task 0030 and task 0034 pre-baseline. Within noise range."
+    "recorded": "2026-03-04",
+    "task": "Task 0039 — container detection guards in is_wsl() and is_wsl2()",
+    "size_bytes": 9037888,
+    "size_human": "8.619 MiB",
+    "delta_bytes": -512,
+    "delta_pct": "-0.006%",
+    "note": "Task 0041 adds single boolean guard in mcp test command (zero-cost operation). Binary shrank 512 bytes (noise). 4 new integration tests, all pass. PASS."
   },
   "build_time": {
-    "cold_release_s": 62.2,
-    "note": "Full LTO cold build (re-timed 2026-02-28). Subsequent incremental builds ~1-2s."
+    "cold_release_s": 58.53,
+    "note": "Full LTO cold build (2026-03-04). Subsequent incremental builds ~1-2s."
+  },
+  "container_detection": {
+    "syscalls_per_call": 4,
+    "note": "stat(/.dockerenv) + open+read(/proc/1/cgroup) + close. getenv calls are user-space only.",
+    "calls_at_startup": 2,
+    "total_additional_syscalls": 8,
+    "measured_latency_us": 33.5,
+    "fraction_of_5ms_budget_pct": 0.670,
+    "short_circuit_order": "optimal — stat(/.dockerenv), getenv(DOCKER_CONTAINER), getenv(container), read(/proc/1/cgroup)",
+    "verdict": "PASS — negligible latency, correct ordering"
   },
   "test_suite": {
     "unit_tests": 231,
-    "integration_tests": 98,
+    "integration_tests": 103,
     "hook_state_tests": 1,
-    "total": 330,
+    "total": 335,
     "ignored": 1,
-    "wall_time_ms": 1778,
-    "result": "all passed"
-  },
-  "template_sizes_bytes": {
-    "ai-fullstack-py.toml": 420,
-    "ai-fullstack-ts.toml": 462,
-    "ai-minimal.toml": 226,
-    "saas-multi-tenant.toml": 722,
-    "total": 1830
+    "result": "all passed (task 0041: 4 new MCP test command error message regression tests added)"
   },
   "target_threshold_bytes": 13107200,
   "target_threshold_human": "12.5 MiB",
-  "headroom_bytes": 4135936,
-  "headroom_human": "3.944 MiB",
+  "headroom_bytes": 4069312,
+  "headroom_human": "3.881 MiB",
   "dependencies": {
     "runtime": [
       "clap 4.5",
@@ -74,7 +76,7 @@
       "predicates 3.0",
       "tempfile 3.0"
     ],
-    "new_in_0034": "none expected — S-complexity text/config change only"
+    "new_in_0039": "none — pure logic addition within existing modules"
   },
   "duplicates": {
     "getrandom": ["0.2.17 (ring)", "0.3.4 (zip)", "0.4.1 (uuid, tempfile)"],
@@ -94,16 +96,8 @@
     "modules_transformed": 2046,
     "build_time_s": 2.06,
     "wall_time_s": 3.80,
-    "previous_informal_baseline": {
-      "source": "iter-030 memory",
-      "js_bundle_kb": 326.03,
-      "js_bundle_gzip_kb": 104.17,
-      "delta_kb": -0.01,
-      "delta_pct": "-0.003%",
-      "verdict": "PASS — sub-byte rounding noise, content-only edit confirmed"
-    },
     "threshold_warn_pct": 5,
     "threshold_block_pct": 10
   },
-  "notes": "Pre-task-0034 baseline. 13,536-byte increase from task 0030 baseline is within noise. 12.5 MiB target met with 3.944 MiB headroom. Task 0034 is S-complexity (55 lines text/config); binary delta expected < 1 KB; no new dependencies expected. Site bundle formally baselined at task 0036: 326.02 kB JS (gzip: 104.16 kB)."
+  "notes": "Task 0041: Single boolean guard added to mcp test command (line 183: && name.is_none()). Zero-cost operation on already-available Option parameter. Binary unchanged (-512 bytes, noise). 4 new integration tests added to cover misleading error message regression (AC1–AC4: named server errors vs generic warning). All 335 tests pass (231 unit, 103 smoke, 1 hook_state). No new dependencies, no compiler warnings. 12.5 MiB target met with 3.881 MiB headroom."
 }
