@@ -1934,7 +1934,7 @@ required = ["GREAT_TEST_SECRET_PRESENT", "GREAT_TEST_SECRET_MISSING"]
 }
 
 #[test]
-fn status_exit_code_nonzero_missing_tools() {
+fn status_exit_zero_even_with_missing_tools() {
     let dir = TempDir::new().unwrap();
     std::fs::write(
         dir.path().join("great.toml"),
@@ -1948,16 +1948,18 @@ nonexistent-tool-xyz-9999 = "latest"
     )
     .unwrap();
 
+    // Status is informational: exit 0 even when tools are missing.
+    // Missing tools are reported via stderr output, not exit code.
     great()
         .current_dir(dir.path())
         .arg("status")
         .assert()
-        .failure()
+        .success()
         .stderr(predicate::str::contains("not installed"));
 }
 
 #[test]
-fn status_exit_code_nonzero_missing_secrets() {
+fn status_exit_zero_even_with_missing_secrets() {
     let dir = TempDir::new().unwrap();
     std::fs::write(
         dir.path().join("great.toml"),
@@ -1972,11 +1974,13 @@ required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
     )
     .unwrap();
 
+    // Status is informational: exit 0 even when secrets are missing.
+    // Missing secrets are reported via stderr output, not exit code.
     great()
         .current_dir(dir.path())
         .arg("status")
         .assert()
-        .failure()
+        .success()
         .stderr(predicate::str::contains("missing"));
 }
 
@@ -2000,6 +2004,40 @@ required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
     .unwrap();
 
     // --json must exit 0 even when there are issues
+    great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn status_human_and_json_exit_codes_match() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[tools.cli]
+nonexistent-tool-xyz-9999 = "latest"
+
+[secrets]
+provider = "env"
+required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
+"#,
+    )
+    .unwrap();
+
+    // Human mode: exit 0 despite issues
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .success();
+
+    // JSON mode: exit 0 despite issues (unchanged behaviour)
     great()
         .current_dir(dir.path())
         .args(["status", "--json"])

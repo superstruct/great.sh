@@ -126,8 +126,6 @@ pub fn run(args: Args) -> Result<()> {
     output::header("great status");
     println!();
 
-    let mut has_critical_issues = false;
-
     // Platform section
     output::info(&format!("Platform: {}", info.platform.display_detailed()));
     if args.verbose {
@@ -179,7 +177,6 @@ pub fn run(args: Args) -> Result<()> {
                 let actual_version = if installed {
                     util::get_command_version(name)
                 } else {
-                    has_critical_issues = true;
                     None
                 };
                 print_tool_status(
@@ -197,7 +194,6 @@ pub fn run(args: Args) -> Result<()> {
                     let actual_version = if installed {
                         util::get_command_version(name)
                     } else {
-                        has_critical_issues = true;
                         None
                     };
                     print_tool_status(
@@ -261,7 +257,6 @@ pub fn run(args: Args) -> Result<()> {
                     if std::env::var(key).is_ok() {
                         output::success(&format!("  {} -- set", key));
                     } else {
-                        has_critical_issues = true;
                         output::error(&format!("  {} -- missing", key));
                     }
                 }
@@ -271,12 +266,10 @@ pub fn run(args: Args) -> Result<()> {
 
     println!();
 
-    // NOTE: Intentional use of process::exit — the status command must print
-    // its full report before exiting non-zero. Using bail!() would abort
-    // mid-report, which is wrong for a diagnostic command.
-    if has_critical_issues {
-        std::process::exit(1);
-    }
+    // Exit 0 regardless of issues found. The status command is informational:
+    // missing tools/secrets are reported via colored output above, not via
+    // exit code. This matches `great status --json` (which uses has_issues)
+    // and the convention of git-status(1).
 
     Ok(())
 }
@@ -285,7 +278,10 @@ pub fn run(args: Args) -> Result<()> {
 // JSON output
 // ---------------------------------------------------------------------------
 
-/// Serialize full status report as JSON to stdout. Always returns Ok (exit 0).
+/// Serialize full status report as JSON to stdout.
+///
+/// Both human and JSON modes always exit 0. Issues are signalled via the
+/// `has_issues` field and `issues` array in the JSON payload.
 fn run_json(
     info: &platform::PlatformInfo,
     config_path: Option<&str>,
