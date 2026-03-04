@@ -306,8 +306,8 @@ fn run_json(
         issues.push("no great.toml found — run `great init` to create one".to_string());
     }
 
-    // Build tools list using explicit if-let to avoid borrow-checker friction
-    // with mutable `issues` inside chained closures.
+    // Build tools list using explicit if-let for consistency and to allow
+    // mutable access to `issues` inside the loop body.
     let tools = if let Some(cfg) = config {
         if let Some(t) = cfg.tools.as_ref() {
             let mut result = Vec::new();
@@ -354,19 +354,32 @@ fn run_json(
         None
     };
 
-    let mcp = config.and_then(|cfg| {
-        cfg.mcp.as_ref().map(|mcps| {
-            mcps.iter()
-                .map(|(name, m)| McpStatus {
+    let mcp = if let Some(cfg) = config {
+        if let Some(mcps) = cfg.mcp.as_ref() {
+            let mut result = Vec::new();
+            for (name, m) in mcps {
+                let available = command_exists(&m.command);
+                if !available {
+                    issues.push(format!(
+                        "MCP server '{}' command '{}' not found",
+                        name, m.command
+                    ));
+                }
+                result.push(McpStatus {
                     name: name.clone(),
                     command: m.command.clone(),
                     args: m.args.clone(),
-                    command_available: command_exists(&m.command),
+                    command_available: available,
                     transport: m.transport.clone(),
-                })
-                .collect()
-        })
-    });
+                });
+            }
+            Some(result)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     let agents = config.and_then(|cfg| {
         cfg.agents.as_ref().map(|a| {

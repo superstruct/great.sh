@@ -2048,6 +2048,73 @@ required = ["GREAT_STATUS_TEST_NONEXISTENT_SECRET"]
 }
 
 #[test]
+fn status_mcp_missing_command_shows_not_found() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.fake-server]
+command = "nonexistent_mcp_status_xyz_9999"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("not found"))
+        .stderr(predicate::str::contains("fake-server"))
+        .stderr(predicate::str::contains("great doctor"));
+}
+
+#[test]
+fn status_json_mcp_missing_sets_has_issues() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.fake-server]
+command = "nonexistent_mcp_status_xyz_9999"
+"#,
+    )
+    .unwrap();
+
+    let output = great()
+        .current_dir(dir.path())
+        .args(["status", "--json"])
+        .output()
+        .expect("failed to run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must be valid JSON");
+
+    // MCP array should exist and contain our server
+    let mcp = parsed.get("mcp").unwrap().as_array().unwrap();
+    assert!(mcp.iter().any(|s| s["name"] == "fake-server"));
+    assert!(mcp.iter().any(|s| s["command_available"] == false));
+
+    // has_issues must be true (this is the bug that Part 1 fixes)
+    assert_eq!(parsed["has_issues"], true);
+
+    // issues array must mention the server
+    let issues = parsed["issues"].as_array().unwrap();
+    assert!(issues.iter().any(|i| {
+        let s = i.as_str().unwrap_or("");
+        s.contains("fake-server") && s.contains("not found")
+    }));
+}
+
+#[test]
 fn status_no_config_exits_zero() {
     let dir = TempDir::new().unwrap();
     great()
