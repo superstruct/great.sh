@@ -495,6 +495,101 @@ fn mcp_add_creates_entry() {
 }
 
 // -----------------------------------------------------------------------
+// MCP Test — error message regression tests (task 0041)
+// -----------------------------------------------------------------------
+
+/// AC1: Named server, no [mcp] section -> name-specific error
+#[test]
+fn mcp_test_named_no_mcp_section_shows_name_error() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["mcp", "test", "nonexistent_xyz"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("MCP server 'nonexistent_xyz' not found"));
+}
+
+/// AC2: Named server, servers exist but not this one -> name-specific error
+#[test]
+fn mcp_test_named_not_found_shows_name_error() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.filesystem]
+command = "echo"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["mcp", "test", "nonexistent_xyz"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("MCP server 'nonexistent_xyz' not found"));
+}
+
+/// AC3: No name, no [mcp] section -> generic warning
+#[test]
+fn mcp_test_no_name_no_mcp_section_shows_generic_warning() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["mcp", "test"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No MCP servers declared"));
+}
+
+/// AC4: No name, servers exist -> tests all (no crash, shows header)
+#[test]
+fn mcp_test_no_name_with_servers_tests_all() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        r#"
+[project]
+name = "test"
+
+[mcp.test-echo]
+command = "echo"
+args = ["hello"]
+"#,
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["mcp", "test"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Testing MCP Servers"));
+}
+
+// -----------------------------------------------------------------------
 // Vault
 // -----------------------------------------------------------------------
 

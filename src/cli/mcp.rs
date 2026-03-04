@@ -180,7 +180,7 @@ fn run_test(name: Option<&str>) -> Result<()> {
 
     let mcps = cfg.mcp.unwrap_or_default();
 
-    if mcps.is_empty() {
+    if mcps.is_empty() && name.is_none() {
         output::warning("No MCP servers declared in great.toml.");
         return Ok(());
     }
