@@ -684,9 +684,7 @@ mod tests {
     #[test]
     fn test_container_detected_from_container_env() {
         let mut probe = MockProbe::new();
-        probe
-            .env_vars
-            .insert("container".into(), "podman".into());
+        probe.env_vars.insert("container".into(), "podman".into());
         assert!(is_container_with_probe(&probe));
     }
 
@@ -738,9 +736,7 @@ mod tests {
             "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
         );
         // Container indicator
-        probe
-            .env_vars
-            .insert("container".into(), "podman".into());
+        probe.env_vars.insert("container".into(), "podman".into());
 
         assert!(!is_wsl_with_probe(&probe));
     }
@@ -757,9 +753,7 @@ mod tests {
             "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
         );
         // Container indicator
-        probe
-            .env_vars
-            .insert("DOCKER_CONTAINER".into(), "1".into());
+        probe.env_vars.insert("DOCKER_CONTAINER".into(), "1".into());
 
         assert!(!is_wsl_with_probe(&probe));
     }
@@ -814,10 +808,9 @@ mod tests {
             "Linux version 6.6.87.2-microsoft-standard-WSL2".into(),
         );
         // Only the cgroup indicator
-        probe.files.insert(
-            "/proc/1/cgroup".into(),
-            "0::/docker/abc123\n".into(),
-        );
+        probe
+            .files
+            .insert("/proc/1/cgroup".into(), "0::/docker/abc123\n".into());
 
         assert!(!is_wsl_with_probe(&probe));
     }

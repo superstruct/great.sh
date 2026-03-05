@@ -3,7 +3,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use clap::Args as ClapArgs;
+use clap::{Args as ClapArgs, ValueEnum};
 
 use crate::cli::output;
 use crate::cli::{bootstrap, tuning};
@@ -349,6 +349,30 @@ fn install_with_spec(
     Ok(None)
 }
 
+/// Provisioning categories that can be selected with `--only` or `--skip`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ApplyCategory {
+    /// Tool installation and system bootstrapping
+    Tools,
+    /// MCP server configuration and bridge registration
+    Mcp,
+    /// Loop-agent file provisioning (reserved for future use)
+    Agents,
+    /// Required secrets validation
+    Secrets,
+}
+
+impl From<&ApplyCategory> for &'static str {
+    fn from(cat: &ApplyCategory) -> Self {
+        match cat {
+            ApplyCategory::Tools => "tools",
+            ApplyCategory::Mcp => "mcp",
+            ApplyCategory::Agents => "agents",
+            ApplyCategory::Secrets => "secrets",
+        }
+    }
+}
+
 /// Apply the configuration from great.toml — install tools, configure MCP servers,
 /// and resolve secrets.
 #[derive(ClapArgs)]
@@ -365,10 +389,31 @@ pub struct Args {
     #[arg(long, short)]
     pub yes: bool,
 
+    /// Only apply these categories (tools, mcp, agents, secrets). Repeatable.
+    /// Mutually exclusive with --skip.
+    #[arg(long, value_delimiter = ',', conflicts_with = "skip")]
+    pub only: Vec<ApplyCategory>,
+
+    /// Skip these categories (tools, mcp, agents, secrets). Repeatable.
+    /// Mutually exclusive with --only.
+    #[arg(long, value_delimiter = ',', conflicts_with = "only")]
+    pub skip: Vec<ApplyCategory>,
+
     /// Set by main.rs from the global --non-interactive flag.
     /// Not a CLI argument -- hidden from clap.
     #[arg(skip)]
     pub non_interactive: bool,
+}
+
+/// Check whether a provisioning category should run given the `--only` / `--skip` filters.
+fn should_apply(category: ApplyCategory, only: &[ApplyCategory], skip: &[ApplyCategory]) -> bool {
+    if !only.is_empty() {
+        return only.contains(&category);
+    }
+    if !skip.is_empty() {
+        return !skip.contains(&category);
+    }
+    true
 }
 
 /// Execute the `great apply` command.
@@ -401,11 +446,56 @@ pub fn run(args: Args) -> Result<()> {
         println!();
     }
 
-    // 2a. Pre-cache sudo credentials before any installs that need root.
-    // Note: The `needs_sudo` platform check intentionally duplicates the `needs_homebrew`
-    // match at line ~410 because sudo must be cached *before* `ensure_prerequisites()`
-    // (which runs `sudo apt-get`), and `needs_homebrew` is computed after that call.
-    let needs_sudo = !args.dry_run && {
+    // Show active filter so the user knows which categories will run
+    if !args.only.is_empty() {
+        let names: Vec<&str> = args.only.iter().map(|c| c.into()).collect();
+        output::info(&format!("Filter: only {}", names.join(", ")));
+        println!();
+    } else if !args.skip.is_empty() {
+        let names: Vec<&str> = args.skip.iter().map(|c| c.into()).collect();
+        output::info(&format!("Filter: skipping {}", names.join(", ")));
+        println!();
+    }
+
+    // ── Tools category (sections 2a–2c, 3, 4, 5b, 5c, 7–10) ────────────
+    if should_apply(ApplyCategory::Tools, &args.only, &args.skip) {
+        // 2a. Pre-cache sudo credentials before any installs that need root.
+        // Note: The `needs_sudo` platform check intentionally duplicates the `needs_homebrew`
+        // match at line ~410 because sudo must be cached *before* `ensure_prerequisites()`
+        // (which runs `sudo apt-get`), and `needs_homebrew` is computed after that call.
+        let needs_sudo = !args.dry_run && {
+            let needs_homebrew = match &info.platform {
+                platform::Platform::MacOS { .. } => true,
+                platform::Platform::Linux { distro, .. }
+                | platform::Platform::Wsl { distro, .. } => {
+                    matches!(
+                        distro,
+                        platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
+                    )
+                }
+                _ => false,
+            };
+            (needs_homebrew && !info.capabilities.has_homebrew)
+                || bootstrap::is_apt_distro(&info.platform)
+        };
+
+        let _sudo_keepalive = if needs_sudo {
+            use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
+            match ensure_sudo_cached(info.is_root, args.non_interactive) {
+                SudoCacheResult::Cached(keepalive) => Some(keepalive),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        // 2b. System prerequisites — before Homebrew since Homebrew needs curl/git/build tools.
+        bootstrap::ensure_prerequisites(args.dry_run, &info);
+
+        // 2c. Ensure Homebrew is available (primary package manager for macOS, Ubuntu, and WSL Ubuntu).
+        // Homebrew (Linuxbrew) is preferred over apt for CLI tools because it provides
+        // up-to-date versions without needing sudo. Apt is kept only as a fallback for
+        // system-level packages (e.g. docker, chrome from official repos).
         let needs_homebrew = match &info.platform {
             platform::Platform::MacOS { .. } => true,
             platform::Platform::Linux { distro, .. } | platform::Platform::Wsl { distro, .. } => {
@@ -416,485 +506,484 @@ pub fn run(args: Args) -> Result<()> {
             }
             _ => false,
         };
-        (needs_homebrew && !info.capabilities.has_homebrew)
-            || bootstrap::is_apt_distro(&info.platform)
-    };
 
-    let _sudo_keepalive = if needs_sudo {
-        use crate::cli::sudo::{ensure_sudo_cached, SudoCacheResult};
-        match ensure_sudo_cached(info.is_root, args.non_interactive) {
-            SudoCacheResult::Cached(keepalive) => Some(keepalive),
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    // 2b. System prerequisites — before Homebrew since Homebrew needs curl/git/build tools.
-    bootstrap::ensure_prerequisites(args.dry_run, &info);
-
-    // 2c. Ensure Homebrew is available (primary package manager for macOS, Ubuntu, and WSL Ubuntu).
-    // Homebrew (Linuxbrew) is preferred over apt for CLI tools because it provides
-    // up-to-date versions without needing sudo. Apt is kept only as a fallback for
-    // system-level packages (e.g. docker, chrome from official repos).
-    let needs_homebrew = match &info.platform {
-        platform::Platform::MacOS { .. } => true,
-        platform::Platform::Linux { distro, .. } | platform::Platform::Wsl { distro, .. } => {
-            matches!(
-                distro,
-                platform::LinuxDistro::Ubuntu | platform::LinuxDistro::Debian
-            )
-        }
-        _ => false,
-    };
-
-    if needs_homebrew && !info.capabilities.has_homebrew {
-        let platform_label = match &info.platform {
-            platform::Platform::MacOS { .. } => "macOS",
-            platform::Platform::Wsl { .. } => "WSL Ubuntu",
-            _ => "Ubuntu/Debian",
-        };
-        if args.dry_run {
-            output::info(&format!(
-                "Homebrew not found — would install (primary package manager for {})",
-                platform_label
-            ));
-        } else {
-            output::warning(&format!(
-                "Homebrew not found — installing (primary package manager for {})...",
-                platform_label
-            ));
-            let status = std::process::Command::new("bash")
+        if needs_homebrew && !info.capabilities.has_homebrew {
+            let platform_label = match &info.platform {
+                platform::Platform::MacOS { .. } => "macOS",
+                platform::Platform::Wsl { .. } => "WSL Ubuntu",
+                _ => "Ubuntu/Debian",
+            };
+            if args.dry_run {
+                output::info(&format!(
+                    "Homebrew not found — would install (primary package manager for {})",
+                    platform_label
+                ));
+            } else {
+                output::warning(&format!(
+                    "Homebrew not found — installing (primary package manager for {})...",
+                    platform_label
+                ));
+                let status = std::process::Command::new("bash")
                 .args([
                     "-c",
                     "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
                 ])
                 .status();
-            match status {
-                Ok(s) if s.success() => {
-                    output::success("Homebrew installed successfully");
-                    // On Linux, brew is installed to /home/linuxbrew/.linuxbrew or ~/.linuxbrew.
-                    // The user's shell profile needs `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"`
-                    // but that only takes effect in new shells. For this session, try to add it to PATH.
-                    if !matches!(info.platform, platform::Platform::MacOS { .. }) {
-                        output::info("Note: You may need to run `eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"` or restart your shell.");
-                    }
-                }
-                _ => {
-                    output::error("Failed to install Homebrew — some tools may not install");
-                    output::info(
-                        "Install manually: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
-                    );
-                }
-            }
-        }
-        println!();
-    }
-
-    // 3. Install runtimes via mise
-    if let Some(tools) = &cfg.tools {
-        // Check if there are any runtimes to install (exclude "cli" key)
-        let has_runtimes = tools.runtimes.keys().any(|k| k != "cli");
-        if has_runtimes {
-            output::header("Runtimes (via mise)");
-
-            if args.dry_run {
-                for (name, version) in &tools.runtimes {
-                    if name == "cli" {
-                        continue;
-                    }
-                    let current = MiseManager::installed_version(name);
-                    match current {
-                        Some(cur) if MiseManager::version_matches(version, &cur) => {
-                            output::success(&format!(
-                                "  {} {} — already at {}",
-                                name, version, cur
-                            ));
+                match status {
+                    Ok(s) if s.success() => {
+                        output::success("Homebrew installed successfully");
+                        // On Linux, brew is installed to /home/linuxbrew/.linuxbrew or ~/.linuxbrew.
+                        // The user's shell profile needs `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"`
+                        // but that only takes effect in new shells. For this session, try to add it to PATH.
+                        if !matches!(info.platform, platform::Platform::MacOS { .. }) {
+                            output::info("Note: You may need to run `eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"` or restart your shell.");
                         }
-                        Some(cur) => {
-                            output::warning(&format!(
-                                "  {} {} — currently {} (would update)",
-                                name, version, cur
-                            ));
-                        }
-                        None => {
-                            output::info(&format!("  {} {} — would install", name, version));
-                        }
-                    }
-                }
-            } else {
-                // Ensure mise is available
-                if !MiseManager::is_available() {
-                    output::warning("mise not found — installing...");
-                    if let Err(e) = MiseManager::ensure_installed() {
-                        output::error(&format!("Failed to install mise: {}", e));
-                        output::warning(
-                            "Skipping runtime installation. Install mise manually: https://mise.jdx.dev",
-                        );
-                    }
-                }
-
-                if MiseManager::is_available() {
-                    let results = MiseManager::provision_from_config(tools);
-                    for result in &results {
-                        match &result.action {
-                            ProvisionAction::AlreadyCorrect => {
-                                output::success(&format!(
-                                    "  {} {} — up to date",
-                                    result.name, result.declared_version
-                                ));
-                            }
-                            ProvisionAction::Installed => {
-                                output::success(&format!(
-                                    "  {} {} — installed",
-                                    result.name, result.declared_version
-                                ));
-                            }
-                            ProvisionAction::Updated => {
-                                output::success(&format!(
-                                    "  {} {} — updated",
-                                    result.name, result.declared_version
-                                ));
-                            }
-                            ProvisionAction::Failed(err) => {
-                                output::error(&format!(
-                                    "  {} {} — failed: {}",
-                                    result.name, result.declared_version, err
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-            println!();
-        }
-
-        // 4. Install CLI tools via package managers (with special-case handling)
-        if let Some(cli_tools) = &tools.cli {
-            if !cli_tools.is_empty() {
-                output::header("CLI Tools");
-                let managers = package_manager::available_managers(args.non_interactive);
-
-                for (name, version) in cli_tools {
-                    // Check binary name — some tools have different binary vs config names
-                    let check_name = tool_install_spec(name)
-                        .map(|s| s.binary_name)
-                        .unwrap_or(name.as_str());
-
-                    if command_exists(check_name) {
-                        output::success(&format!("  {} — already installed", name));
-                        continue;
-                    }
-
-                    if args.dry_run {
-                        output::info(&format!("  {} {} — would install", name, version));
-                        continue;
-                    }
-
-                    let version_opt = if version == "latest" {
-                        None
-                    } else {
-                        Some(version.as_str())
-                    };
-
-                    // Try special install spec first
-                    let mut installed = false;
-                    if let Some(spec) = tool_install_spec(name) {
-                        match install_with_spec(&spec, &managers, version_opt) {
-                            Ok(Some(method)) => {
-                                output::success(&format!(
-                                    "  {} — installed via {} (special)",
-                                    name, method
-                                ));
-                                installed = true;
-                            }
-                            Ok(None) => {} // Fall through to generic install
-                            Err(e) => {
-                                output::error(&format!("  {} — install error: {}", name, e));
-                                continue;
-                            }
-                        }
-                    }
-
-                    // Fall back to generic package manager install
-                    if !installed {
-                        for mgr in &managers {
-                            match mgr.install(name, version_opt) {
-                                Ok(()) => {
-                                    output::success(&format!(
-                                        "  {} — installed via {}",
-                                        name,
-                                        mgr.name()
-                                    ));
-                                    installed = true;
-                                    break;
-                                }
-                                Err(_) => continue,
-                            }
-                        }
-                    }
-
-                    if !installed {
-                        output::error(&format!(
-                            "  {} — could not install (no package manager succeeded)",
-                            name
-                        ));
-                    }
-                }
-                println!();
-            }
-        }
-    }
-
-    // 5. Configure MCP servers
-    if let Some(mcps) = &cfg.mcp {
-        if !mcps.is_empty() {
-            output::header("MCP Servers");
-
-            let mcp_json_path = Path::new(".mcp.json");
-            let mut mcp_config: HashMap<String, serde_json::Value> = if mcp_json_path.exists() {
-                let content =
-                    std::fs::read_to_string(mcp_json_path).context("failed to read .mcp.json")?;
-                serde_json::from_str(&content).unwrap_or_default()
-            } else {
-                HashMap::new()
-            };
-
-            // Get the mcpServers object, or create it
-            let servers = mcp_config
-                .entry("mcpServers".to_string())
-                .or_insert_with(|| serde_json::json!({}));
-
-            let servers_obj = match servers.as_object_mut() {
-                Some(obj) => obj,
-                None => {
-                    output::error("  .mcp.json mcpServers is not an object");
-                    return Ok(());
-                }
-            };
-
-            let mut changed = false;
-
-            for (name, mcp) in mcps {
-                // Check if already configured
-                if servers_obj.contains_key(name) {
-                    output::success(&format!("  {} — already configured", name));
-                    continue;
-                }
-
-                if args.dry_run {
-                    output::info(&format!("  {} — would configure ({})", name, mcp.command));
-                    continue;
-                }
-
-                // Build the MCP server config entry
-                let mut server_entry = serde_json::json!({
-                    "command": mcp.command,
-                });
-
-                if let Some(args_list) = &mcp.args {
-                    server_entry["args"] = serde_json::json!(args_list);
-                }
-
-                // Resolve env vars — replace ${SECRET_NAME} with actual values
-                if let Some(env) = &mcp.env {
-                    let mut resolved_env = serde_json::Map::new();
-                    for (key, value) in env {
-                        let resolved = resolve_secret_refs(value);
-                        resolved_env.insert(key.clone(), serde_json::Value::String(resolved));
-                    }
-                    server_entry["env"] = serde_json::Value::Object(resolved_env);
-                }
-
-                servers_obj.insert(name.clone(), server_entry);
-                output::success(&format!("  {} — configured ({})", name, mcp.command));
-                changed = true;
-            }
-
-            // Write .mcp.json if changed
-            if changed && !args.dry_run {
-                let json = serde_json::to_string_pretty(&mcp_config)
-                    .context("failed to serialize .mcp.json")?;
-                std::fs::write(mcp_json_path, json).context("failed to write .mcp.json")?;
-                output::info("  Updated .mcp.json");
-            }
-
-            println!();
-        }
-    }
-
-    // 5a. Register MCP bridge in .mcp.json
-    if let Some(ref bridge_cfg) = cfg.mcp_bridge {
-        output::header("MCP Bridge");
-
-        let mcp_json_path = crate::mcp::project_mcp_path();
-        let mut mcp_json = crate::mcp::McpJsonConfig::load(&mcp_json_path).unwrap_or_default();
-
-        // Build desired args
-        let mut bridge_args = vec!["mcp-bridge".to_string()];
-        if let Some(ref preset) = bridge_cfg.preset {
-            bridge_args.push("--preset".to_string());
-            bridge_args.push(preset.clone());
-        }
-        if let Some(ref backends) = bridge_cfg.backends {
-            bridge_args.push("--backends".to_string());
-            bridge_args.push(backends.join(","));
-        }
-
-        let desired_entry = crate::mcp::McpServerEntry {
-            command: "great".to_string(),
-            args: Some(bridge_args.clone()),
-            env: None,
-        };
-
-        // Check if entry already exists with matching args
-        let needs_update = if let Some(existing) = mcp_json.mcp_servers.get("great-bridge") {
-            existing.args.as_ref() != Some(&bridge_args) || existing.command != "great"
-        } else {
-            true
-        };
-
-        if needs_update {
-            if args.dry_run {
-                output::info("  great-bridge — would register in .mcp.json");
-            } else {
-                mcp_json
-                    .mcp_servers
-                    .insert("great-bridge".to_string(), desired_entry);
-                if let Err(e) = mcp_json.save(&mcp_json_path) {
-                    output::error(&format!(
-                        "  great-bridge — failed to write .mcp.json: {}",
-                        e
-                    ));
-                } else {
-                    output::success("  great-bridge — registered in .mcp.json");
-                }
-            }
-        } else {
-            output::success("  great-bridge — already registered in .mcp.json");
-        }
-
-        println!();
-    }
-
-    // 5b. Install bitwarden-cli if secrets provider is bitwarden and bw is missing
-    if let Some(secrets) = &cfg.secrets {
-        if secrets.provider.as_deref() == Some("bitwarden") && !command_exists("bw") {
-            if args.dry_run {
-                output::info("bitwarden-cli (bw) — would install (secrets provider is bitwarden)");
-            } else {
-                output::header("Bitwarden CLI");
-                output::info("Secrets provider is bitwarden — installing bw CLI...");
-                let managers = package_manager::available_managers(args.non_interactive);
-                let spec = tool_install_spec("bw").expect("bw has install spec");
-                match install_with_spec(&spec, &managers, None) {
-                    Ok(Some(method)) => {
-                        output::success(&format!("  bw — installed via {}", method));
                     }
                     _ => {
-                        output::error(
-                            "  bw — could not install. Install manually: npm install -g @bitwarden/cli",
-                        );
+                        output::error("Failed to install Homebrew — some tools may not install");
+                        output::info(
+                        "Install manually: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                    );
                     }
                 }
-                println!();
             }
+            println!();
         }
-    }
 
-    // 5c. Configure Starship prompt and Nerd Font
-    let has_starship_in_config = cfg
-        .tools
-        .as_ref()
-        .and_then(|t| t.cli.as_ref())
-        .map(|cli| cli.contains_key("starship"))
-        .unwrap_or(false);
+        // 3. Install runtimes via mise
+        if let Some(tools) = &cfg.tools {
+            // Check if there are any runtimes to install (exclude "cli" key)
+            let has_runtimes = tools.runtimes.keys().any(|k| k != "cli");
+            if has_runtimes {
+                output::header("Runtimes (via mise)");
 
-    if has_starship_in_config {
-        if command_exists("starship") {
-            configure_starship(args.dry_run);
-        }
-        install_nerd_font(args.dry_run, &info);
-    }
-
-    // 6. Check secrets
-    if let Some(secrets) = &cfg.secrets {
-        if let Some(required) = &secrets.required {
-            let missing: Vec<&String> = required
-                .iter()
-                .filter(|k| std::env::var(k).is_err())
-                .collect();
-            if !missing.is_empty() {
-                output::header("Secrets");
-                for key in &missing {
-                    output::warning(&format!(
-                        "  {} — not set (set via environment or `great vault set {}`)",
-                        key, key
-                    ));
-                }
-                println!();
-            }
-        }
-    }
-
-    // 7. Apply platform-specific overrides
-    if let Some(platform_cfg) = &cfg.platform {
-        let override_tools = match &info.platform {
-            platform::Platform::MacOS { .. } => platform_cfg
-                .macos
-                .as_ref()
-                .and_then(|o| o.extra_tools.as_ref()),
-            platform::Platform::Wsl { .. } => platform_cfg
-                .wsl2
-                .as_ref()
-                .and_then(|o| o.extra_tools.as_ref()),
-            platform::Platform::Linux { .. } => platform_cfg
-                .linux
-                .as_ref()
-                .and_then(|o| o.extra_tools.as_ref()),
-            _ => None,
-        };
-
-        if let Some(extra_tools) = override_tools {
-            if !extra_tools.is_empty() {
-                output::header("Platform-specific tools");
-                let managers = package_manager::available_managers(args.non_interactive);
-                for tool in extra_tools {
-                    if command_exists(tool) {
-                        output::success(&format!("  {} — already installed", tool));
-                        continue;
-                    }
-                    if args.dry_run {
-                        output::info(&format!("  {} — would install", tool));
-                        continue;
-                    }
-                    let mut installed = false;
-                    for mgr in &managers {
-                        if mgr.install(tool, None).is_ok() {
-                            output::success(&format!("  {} — installed via {}", tool, mgr.name()));
-                            installed = true;
-                            break;
+                if args.dry_run {
+                    for (name, version) in &tools.runtimes {
+                        if name == "cli" {
+                            continue;
+                        }
+                        let current = MiseManager::installed_version(name);
+                        match current {
+                            Some(cur) if MiseManager::version_matches(version, &cur) => {
+                                output::success(&format!(
+                                    "  {} {} — already at {}",
+                                    name, version, cur
+                                ));
+                            }
+                            Some(cur) => {
+                                output::warning(&format!(
+                                    "  {} {} — currently {} (would update)",
+                                    name, version, cur
+                                ));
+                            }
+                            None => {
+                                output::info(&format!("  {} {} — would install", name, version));
+                            }
                         }
                     }
-                    if !installed {
-                        output::error(&format!("  {} — could not install", tool));
+                } else {
+                    // Ensure mise is available
+                    if !MiseManager::is_available() {
+                        output::warning("mise not found — installing...");
+                        if let Err(e) = MiseManager::ensure_installed() {
+                            output::error(&format!("Failed to install mise: {}", e));
+                            output::warning(
+                            "Skipping runtime installation. Install mise manually: https://mise.jdx.dev",
+                        );
+                        }
+                    }
+
+                    if MiseManager::is_available() {
+                        let results = MiseManager::provision_from_config(tools);
+                        for result in &results {
+                            match &result.action {
+                                ProvisionAction::AlreadyCorrect => {
+                                    output::success(&format!(
+                                        "  {} {} — up to date",
+                                        result.name, result.declared_version
+                                    ));
+                                }
+                                ProvisionAction::Installed => {
+                                    output::success(&format!(
+                                        "  {} {} — installed",
+                                        result.name, result.declared_version
+                                    ));
+                                }
+                                ProvisionAction::Updated => {
+                                    output::success(&format!(
+                                        "  {} {} — updated",
+                                        result.name, result.declared_version
+                                    ));
+                                }
+                                ProvisionAction::Failed(err) => {
+                                    output::error(&format!(
+                                        "  {} {} — failed: {}",
+                                        result.name, result.declared_version, err
+                                    ));
+                                }
+                            }
+                        }
                     }
                 }
                 println!();
             }
+
+            // 4. Install CLI tools via package managers (with special-case handling)
+            if let Some(cli_tools) = &tools.cli {
+                if !cli_tools.is_empty() {
+                    output::header("CLI Tools");
+                    let managers = package_manager::available_managers(args.non_interactive);
+
+                    for (name, version) in cli_tools {
+                        // Check binary name — some tools have different binary vs config names
+                        let check_name = tool_install_spec(name)
+                            .map(|s| s.binary_name)
+                            .unwrap_or(name.as_str());
+
+                        if command_exists(check_name) {
+                            output::success(&format!("  {} — already installed", name));
+                            continue;
+                        }
+
+                        if args.dry_run {
+                            output::info(&format!("  {} {} — would install", name, version));
+                            continue;
+                        }
+
+                        let version_opt = if version == "latest" {
+                            None
+                        } else {
+                            Some(version.as_str())
+                        };
+
+                        // Try special install spec first
+                        let mut installed = false;
+                        if let Some(spec) = tool_install_spec(name) {
+                            match install_with_spec(&spec, &managers, version_opt) {
+                                Ok(Some(method)) => {
+                                    output::success(&format!(
+                                        "  {} — installed via {} (special)",
+                                        name, method
+                                    ));
+                                    installed = true;
+                                }
+                                Ok(None) => {} // Fall through to generic install
+                                Err(e) => {
+                                    output::error(&format!("  {} — install error: {}", name, e));
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // Fall back to generic package manager install
+                        if !installed {
+                            for mgr in &managers {
+                                match mgr.install(name, version_opt) {
+                                    Ok(()) => {
+                                        output::success(&format!(
+                                            "  {} — installed via {}",
+                                            name,
+                                            mgr.name()
+                                        ));
+                                        installed = true;
+                                        break;
+                                    }
+                                    Err(_) => continue,
+                                }
+                            }
+                        }
+
+                        if !installed {
+                            output::error(&format!(
+                                "  {} — could not install (no package manager succeeded)",
+                                name
+                            ));
+                        }
+                    }
+                    println!();
+                }
+            }
         }
+
+        // 5b. Install bitwarden-cli if secrets provider is bitwarden and bw is missing
+        // Note: gated under `tools` (not `secrets`) because this installs a tool binary.
+        if let Some(secrets) = &cfg.secrets {
+            if secrets.provider.as_deref() == Some("bitwarden") && !command_exists("bw") {
+                if args.dry_run {
+                    output::info(
+                        "bitwarden-cli (bw) — would install (secrets provider is bitwarden)",
+                    );
+                } else {
+                    output::header("Bitwarden CLI");
+                    output::info("Secrets provider is bitwarden — installing bw CLI...");
+                    let managers = package_manager::available_managers(args.non_interactive);
+                    let spec = tool_install_spec("bw").expect("bw has install spec");
+                    match install_with_spec(&spec, &managers, None) {
+                        Ok(Some(method)) => {
+                            output::success(&format!("  bw — installed via {}", method));
+                        }
+                        _ => {
+                            output::error(
+                            "  bw — could not install. Install manually: npm install -g @bitwarden/cli",
+                        );
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+
+        // 5c. Configure Starship prompt and Nerd Font
+        let has_starship_in_config = cfg
+            .tools
+            .as_ref()
+            .and_then(|t| t.cli.as_ref())
+            .map(|cli| cli.contains_key("starship"))
+            .unwrap_or(false);
+
+        if has_starship_in_config {
+            if command_exists("starship") {
+                configure_starship(args.dry_run);
+            }
+            install_nerd_font(args.dry_run, &info);
+        }
+
+        // 7. Apply platform-specific overrides
+        if let Some(platform_cfg) = &cfg.platform {
+            let override_tools = match &info.platform {
+                platform::Platform::MacOS { .. } => platform_cfg
+                    .macos
+                    .as_ref()
+                    .and_then(|o| o.extra_tools.as_ref()),
+                platform::Platform::Wsl { .. } => platform_cfg
+                    .wsl2
+                    .as_ref()
+                    .and_then(|o| o.extra_tools.as_ref()),
+                platform::Platform::Linux { .. } => platform_cfg
+                    .linux
+                    .as_ref()
+                    .and_then(|o| o.extra_tools.as_ref()),
+                _ => None,
+            };
+
+            if let Some(extra_tools) = override_tools {
+                if !extra_tools.is_empty() {
+                    output::header("Platform-specific tools");
+                    let managers = package_manager::available_managers(args.non_interactive);
+                    for tool in extra_tools {
+                        if command_exists(tool) {
+                            output::success(&format!("  {} — already installed", tool));
+                            continue;
+                        }
+                        if args.dry_run {
+                            output::info(&format!("  {} — would install", tool));
+                            continue;
+                        }
+                        let mut installed = false;
+                        for mgr in &managers {
+                            if mgr.install(tool, None).is_ok() {
+                                output::success(&format!(
+                                    "  {} — installed via {}",
+                                    tool,
+                                    mgr.name()
+                                ));
+                                installed = true;
+                                break;
+                            }
+                        }
+                        if !installed {
+                            output::error(&format!("  {} — could not install", tool));
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+
+        // 8. Docker
+        bootstrap::ensure_docker(args.dry_run, &info);
+
+        // 9. Claude Code
+        output::header("Claude Code");
+        bootstrap::ensure_claude_code(args.dry_run);
+        println!();
+
+        // 10. System tuning (Linux/WSL only)
+        tuning::apply_system_tuning(args.dry_run, &info);
+    } // end Tools category
+
+    // ── MCP category (sections 5, 5a) ─────────────────────────────────────
+    if should_apply(ApplyCategory::Mcp, &args.only, &args.skip) {
+        let has_mcp_config = cfg.mcp.as_ref().is_some_and(|m| !m.is_empty());
+        let has_bridge_config = cfg.mcp_bridge.is_some();
+        if !has_mcp_config && !has_bridge_config {
+            output::info("  MCP Servers: none configured (add [mcp] to great.toml)");
+        }
+
+        // 5. Configure MCP servers
+        if let Some(mcps) = &cfg.mcp {
+            if !mcps.is_empty() {
+                output::header("MCP Servers");
+
+                let mcp_json_path = Path::new(".mcp.json");
+                let mut mcp_config: HashMap<String, serde_json::Value> = if mcp_json_path.exists() {
+                    let content = std::fs::read_to_string(mcp_json_path)
+                        .context("failed to read .mcp.json")?;
+                    serde_json::from_str(&content).unwrap_or_default()
+                } else {
+                    HashMap::new()
+                };
+
+                // Get the mcpServers object, or create it
+                let servers = mcp_config
+                    .entry("mcpServers".to_string())
+                    .or_insert_with(|| serde_json::json!({}));
+
+                let servers_obj = match servers.as_object_mut() {
+                    Some(obj) => obj,
+                    None => {
+                        output::error("  .mcp.json mcpServers is not an object");
+                        return Ok(());
+                    }
+                };
+
+                let mut changed = false;
+
+                for (name, mcp) in mcps {
+                    // Check if already configured
+                    if servers_obj.contains_key(name) {
+                        output::success(&format!("  {} — already configured", name));
+                        continue;
+                    }
+
+                    if args.dry_run {
+                        output::info(&format!("  {} — would configure ({})", name, mcp.command));
+                        continue;
+                    }
+
+                    // Build the MCP server config entry
+                    let mut server_entry = serde_json::json!({
+                        "command": mcp.command,
+                    });
+
+                    if let Some(args_list) = &mcp.args {
+                        server_entry["args"] = serde_json::json!(args_list);
+                    }
+
+                    // Resolve env vars — replace ${SECRET_NAME} with actual values
+                    if let Some(env) = &mcp.env {
+                        let mut resolved_env = serde_json::Map::new();
+                        for (key, value) in env {
+                            let resolved = resolve_secret_refs(value);
+                            resolved_env.insert(key.clone(), serde_json::Value::String(resolved));
+                        }
+                        server_entry["env"] = serde_json::Value::Object(resolved_env);
+                    }
+
+                    servers_obj.insert(name.clone(), server_entry);
+                    output::success(&format!("  {} — configured ({})", name, mcp.command));
+                    changed = true;
+                }
+
+                // Write .mcp.json if changed
+                if changed && !args.dry_run {
+                    let json = serde_json::to_string_pretty(&mcp_config)
+                        .context("failed to serialize .mcp.json")?;
+                    std::fs::write(mcp_json_path, json).context("failed to write .mcp.json")?;
+                    output::info("  Updated .mcp.json");
+                }
+
+                println!();
+            }
+        }
+
+        // 5a. Register MCP bridge in .mcp.json
+        if let Some(ref bridge_cfg) = cfg.mcp_bridge {
+            output::header("MCP Bridge");
+
+            let mcp_json_path = crate::mcp::project_mcp_path();
+            let mut mcp_json = crate::mcp::McpJsonConfig::load(&mcp_json_path).unwrap_or_default();
+
+            // Build desired args
+            let mut bridge_args = vec!["mcp-bridge".to_string()];
+            if let Some(ref preset) = bridge_cfg.preset {
+                bridge_args.push("--preset".to_string());
+                bridge_args.push(preset.clone());
+            }
+            if let Some(ref backends) = bridge_cfg.backends {
+                bridge_args.push("--backends".to_string());
+                bridge_args.push(backends.join(","));
+            }
+
+            let desired_entry = crate::mcp::McpServerEntry {
+                command: "great".to_string(),
+                args: Some(bridge_args.clone()),
+                env: None,
+            };
+
+            // Check if entry already exists with matching args
+            let needs_update = if let Some(existing) = mcp_json.mcp_servers.get("great-bridge") {
+                existing.args.as_ref() != Some(&bridge_args) || existing.command != "great"
+            } else {
+                true
+            };
+
+            if needs_update {
+                if args.dry_run {
+                    output::info("  great-bridge — would register in .mcp.json");
+                } else {
+                    mcp_json
+                        .mcp_servers
+                        .insert("great-bridge".to_string(), desired_entry);
+                    if let Err(e) = mcp_json.save(&mcp_json_path) {
+                        output::error(&format!(
+                            "  great-bridge — failed to write .mcp.json: {}",
+                            e
+                        ));
+                    } else {
+                        output::success("  great-bridge — registered in .mcp.json");
+                    }
+                }
+            } else {
+                output::success("  great-bridge — already registered in .mcp.json");
+            }
+
+            println!();
+        }
+    } // end Mcp category
+
+    // ── Agents category (reserved for future loop-agent file provisioning) ──
+    if should_apply(ApplyCategory::Agents, &args.only, &args.skip) {
+        // Only show the placeholder message when the user explicitly filtered categories,
+        // so unfiltered runs don't emit noise for a no-op category.
+        if !args.only.is_empty() || !args.skip.is_empty() {
+            output::info("  agents: no provisioning configured (reserved for future use)");
+        }
+        // Reserved: loop-agent file provisioning will be added here.
     }
 
-    // 8. Docker
-    bootstrap::ensure_docker(args.dry_run, &info);
-
-    // 9. Claude Code
-    output::header("Claude Code");
-    bootstrap::ensure_claude_code(args.dry_run);
-    println!();
-
-    // 10. System tuning (Linux/WSL only)
-    tuning::apply_system_tuning(args.dry_run, &info);
+    // ── Secrets category (section 6) ──────────────────────────────────────
+    if should_apply(ApplyCategory::Secrets, &args.only, &args.skip) {
+        // 6. Check secrets
+        if let Some(secrets) = &cfg.secrets {
+            if let Some(required) = &secrets.required {
+                let missing: Vec<&String> = required
+                    .iter()
+                    .filter(|k| std::env::var(k).is_err())
+                    .collect();
+                if !missing.is_empty() {
+                    output::header("Secrets");
+                    for key in &missing {
+                        output::warning(&format!(
+                            "  {} — not set (set via environment or `great vault set {}`)",
+                            key, key
+                        ));
+                    }
+                    println!();
+                }
+            }
+        }
+    } // end Secrets category
 
     // Summary
     if args.dry_run {
@@ -1056,5 +1145,49 @@ mod tests {
     fn test_resolve_secret_refs_empty_string() {
         let result = resolve_secret_refs("");
         assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_should_apply_no_filters() {
+        assert!(should_apply(ApplyCategory::Tools, &[], &[]));
+        assert!(should_apply(ApplyCategory::Mcp, &[], &[]));
+        assert!(should_apply(ApplyCategory::Agents, &[], &[]));
+        assert!(should_apply(ApplyCategory::Secrets, &[], &[]));
+    }
+
+    #[test]
+    fn test_should_apply_only_match() {
+        assert!(should_apply(
+            ApplyCategory::Tools,
+            &[ApplyCategory::Tools],
+            &[]
+        ));
+        assert!(!should_apply(
+            ApplyCategory::Mcp,
+            &[ApplyCategory::Tools],
+            &[]
+        ));
+    }
+
+    #[test]
+    fn test_should_apply_skip_match() {
+        assert!(!should_apply(
+            ApplyCategory::Tools,
+            &[],
+            &[ApplyCategory::Tools]
+        ));
+        assert!(should_apply(
+            ApplyCategory::Mcp,
+            &[],
+            &[ApplyCategory::Tools]
+        ));
+    }
+
+    #[test]
+    fn test_should_apply_only_multiple() {
+        let only = &[ApplyCategory::Tools, ApplyCategory::Mcp];
+        assert!(should_apply(ApplyCategory::Tools, only, &[]));
+        assert!(should_apply(ApplyCategory::Mcp, only, &[]));
+        assert!(!should_apply(ApplyCategory::Secrets, only, &[]));
     }
 }

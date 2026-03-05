@@ -516,7 +516,9 @@ name = "test"
         .args(["mcp", "test", "nonexistent_xyz"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("MCP server 'nonexistent_xyz' not found"));
+        .stderr(predicate::str::contains(
+            "MCP server 'nonexistent_xyz' not found",
+        ));
 }
 
 /// AC2: Named server, servers exist but not this one -> name-specific error
@@ -540,7 +542,9 @@ command = "echo"
         .args(["mcp", "test", "nonexistent_xyz"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("MCP server 'nonexistent_xyz' not found"));
+        .stderr(predicate::str::contains(
+            "MCP server 'nonexistent_xyz' not found",
+        ));
 }
 
 /// AC3: No name, no [mcp] section -> generic warning
@@ -850,6 +854,128 @@ fn apply_dry_run_no_sudo_prompt() {
         .timeout(std::time::Duration::from_secs(10))
         .assert()
         .success();
+}
+
+#[test]
+fn apply_only_tools_dry_run() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n\n[tools]\nnode = \"22\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--only", "tools", "--dry-run"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Dry run mode"));
+}
+
+#[test]
+fn apply_only_mcp_dry_run() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n\n[mcp.context7]\ncommand = \"npx\"\nargs = [\"-y\", \"@upstash/context7-mcp\"]\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--only", "mcp", "--dry-run"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success();
+}
+
+#[test]
+fn apply_only_agents_dry_run() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--only", "agents", "--dry-run"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("CLI Tools").not())
+        .stderr(predicate::str::contains("MCP Servers").not());
+}
+
+#[test]
+fn apply_skip_tools_dry_run() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--skip", "tools", "--dry-run"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success();
+}
+
+#[test]
+fn apply_only_and_skip_conflict() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--only", "tools", "--skip", "mcp"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn apply_skip_and_only_conflict_reverse_order() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--skip", "mcp", "--only", "tools"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn apply_invalid_category() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("great.toml"),
+        "[project]\nname = \"test\"\n",
+    )
+    .unwrap();
+
+    great()
+        .current_dir(dir.path())
+        .args(["apply", "--only", "nonsense", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value"));
 }
 
 // -----------------------------------------------------------------------
