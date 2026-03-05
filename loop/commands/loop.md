@@ -28,6 +28,8 @@ Spawn a team of four teammates:
 Give each teammate the approved spec and scout report.
 ```
 
+**Lightweight teams:** For XS tasks (docs-only, config, single-file fixes), Deming MAY skip Wirth, Kerckhoffs, and Rams when their domain is clearly not affected. Document the skip rationale in the observer report.
+
 In parallel with the team, run:
 - **Wirth** (subagent, Sonnet) — Performance sentinel. Measure artifact size, run benchmarks, flag regressions. Report to team lead.
 
