@@ -1,5 +1,5 @@
-# Ubuntu 22.04 test environment for great.sh
-FROM ubuntu:22.04
+# Ubuntu 24.04 test environment for great.sh
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libdbus-1-dev \
     libsecret-1-dev \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust
@@ -25,4 +26,4 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs && \
     cargo fetch && \
     rm -rf src
 
-LABEL description="great.sh test environment - Ubuntu 22.04"
+LABEL description="great.sh test environment - Ubuntu 24.04"
