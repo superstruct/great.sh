@@ -1,11 +1,11 @@
 {
-  "recorded": "2026-03-04",
-  "task": "Task 0041 — MCP test command guard (check preceding baseline for details)",
-  "git_commit": "main (mcp test command boolean guard: && name.is_none())",
+  "recorded": "2026-03-05",
+  "task": "Task 0045 — add --only/--skip flags to great apply",
+  "git_commit": "main (apply: ApplyCategory enum + should_apply helper)",
   "artifact": {
     "path": "target/release/great",
-    "size_bytes": 9037376,
-    "size_human": "8.619 MiB",
+    "size_bytes": 9068696,
+    "size_human": "8.649 MiB",
     "profile": {
       "lto": true,
       "strip": true,
@@ -14,39 +14,29 @@
   },
   "previous_baseline": {
     "recorded": "2026-03-04",
-    "task": "Task 0039 — container detection guards in is_wsl() and is_wsl2()",
-    "size_bytes": 9037888,
+    "task": "Task 0041 — MCP test command guard",
+    "size_bytes": 9037376,
     "size_human": "8.619 MiB",
-    "delta_bytes": -512,
-    "delta_pct": "-0.006%",
-    "note": "Task 0041 adds single boolean guard in mcp test command (zero-cost operation). Binary shrank 512 bytes (noise). 4 new integration tests, all pass. PASS."
+    "delta_bytes": 31320,
+    "delta_pct": "+0.347%",
+    "note": "Task 0045 adds ApplyCategory (4-variant Copy enum) + Vec<ApplyCategory> x2 + should_apply helper. Binary grew 31,320 bytes from clap ValueEnum proc-macro output. No new runtime crates. PASS."
   },
   "build_time": {
-    "cold_release_s": 58.53,
-    "note": "Full LTO cold build (2026-03-04). Subsequent incremental builds ~1-2s."
-  },
-  "container_detection": {
-    "syscalls_per_call": 4,
-    "note": "stat(/.dockerenv) + open+read(/proc/1/cgroup) + close. getenv calls are user-space only.",
-    "calls_at_startup": 2,
-    "total_additional_syscalls": 8,
-    "measured_latency_us": 33.5,
-    "fraction_of_5ms_budget_pct": 0.670,
-    "short_circuit_order": "optimal — stat(/.dockerenv), getenv(DOCKER_CONTAINER), getenv(container), read(/proc/1/cgroup)",
-    "verdict": "PASS — negligible latency, correct ordering"
+    "cold_debug_s": 25.2,
+    "note": "Full cold debug build (2026-03-05). Release build from previous session: ~65s."
   },
   "test_suite": {
     "unit_tests": 231,
-    "integration_tests": 103,
+    "integration_tests": 108,
     "hook_state_tests": 1,
-    "total": 335,
+    "total": 340,
     "ignored": 1,
-    "result": "all passed (task 0041: 4 new MCP test command error message regression tests added)"
+    "result": "all passed (task 0045: no new tests added for --only/--skip yet)"
   },
   "target_threshold_bytes": 13107200,
   "target_threshold_human": "12.5 MiB",
-  "headroom_bytes": 4069312,
-  "headroom_human": "3.881 MiB",
+  "headroom_bytes": 3851992,
+  "headroom_human": "3.673 MiB",
   "dependencies": {
     "runtime": [
       "clap 4.5",
@@ -76,14 +66,15 @@
       "predicates 3.0",
       "tempfile 3.0"
     ],
-    "new_in_0039": "none — pure logic addition within existing modules"
+    "new_in_0045": "none — ValueEnum is from clap (existing dependency)"
   },
   "duplicates": {
     "getrandom": ["0.2.17 (ring)", "0.3.4 (zip)", "0.4.1 (uuid, tempfile)"],
     "note": "Pre-existing triple getrandom. Unavoidable — ring/zip/uuid have incompatible version requirements."
   },
   "compiler_warnings": [
-    "DEPRECATED: assert_cmd::Command::cargo_bin in tests/cli_smoke.rs — pre-existing, not a regression"
+    "warning: function `should_apply` is never used (dead_code) — task 0045: declared but not yet wired into run() call sites. Flags are currently no-ops.",
+    "warning: unused import: `ValueEnum` in apply.rs line 6 — should_apply is unused so ValueEnum appears unused to release compiler. Pre-existing pattern."
   ],
   "site_bundle": {
     "recorded": "2026-02-28",
@@ -99,5 +90,5 @@
     "threshold_warn_pct": 5,
     "threshold_block_pct": 10
   },
-  "notes": "Task 0041: Single boolean guard added to mcp test command (line 183: && name.is_none()). Zero-cost operation on already-available Option parameter. Binary unchanged (-512 bytes, noise). 4 new integration tests added to cover misleading error message regression (AC1–AC4: named server errors vs generic warning). All 335 tests pass (231 unit, 103 smoke, 1 hook_state). No new dependencies, no compiler warnings. 12.5 MiB target met with 3.881 MiB headroom."
+  "notes": "Task 0045: Adds --only/--skip category filter flags to great apply. ApplyCategory is a 4-variant Copy enum with ValueEnum derive; two Vec<ApplyCategory> fields added to Args. should_apply() is O(n<=4). Binary grew +31,320 bytes (+0.35%) from proc-macro expansion — expected, not a concern. Critical finding: should_apply() is declared but never called from run(); the --only/--skip flags are accepted by clap but have no effect at runtime. Correctness gap, not a performance issue. 340 tests pass."
 }
