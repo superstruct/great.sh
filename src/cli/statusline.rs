@@ -15,17 +15,39 @@ use serde_json::Value;
 /// Session metadata piped by Claude Code on each statusline tick.
 /// All fields are optional -- Claude Code may omit any of them, and
 /// the entire blob may be absent or empty.
-#[derive(Debug, Deserialize, Default)]
+///
+/// Parsed exclusively via `parse_session_info_bytes` which handles
+/// both the official nested schema and legacy flat fields.
+#[derive(Debug, Default)]
 pub struct SessionInfo {
-    #[allow(dead_code)] // Deserialized for forward-compatibility; not rendered.
-    pub model: Option<String>,
+    /// Model display name (e.g. "Opus 4.6")
+    pub model_name: Option<String>,
+    /// Model identifier (e.g. "claude-opus-4-6")
+    #[allow(dead_code)] // Parsed for forward-compatibility; not rendered yet.
+    pub model_id: Option<String>,
+    /// Total accumulated cost in USD
     pub cost_usd: Option<f64>,
+    /// Total duration in milliseconds
+    #[allow(dead_code)] // Parsed for forward-compatibility; not rendered yet.
+    pub total_duration_ms: Option<u64>,
+    /// Total lines added in the session
+    pub lines_added: Option<u64>,
+    /// Total lines removed in the session
+    pub lines_removed: Option<u64>,
+    /// Total context tokens used (input + output)
     pub context_tokens: Option<u64>,
+    /// Context window size in tokens
     pub context_window: Option<u64>,
-    #[allow(dead_code)] // Deserialized for forward-compatibility; not rendered.
-    pub workspace: Option<String>,
+    /// Pre-calculated context usage percentage from upstream
+    pub used_percentage: Option<f64>,
+    /// Whether the session exceeds the 200k token threshold
+    #[allow(dead_code)] // Parsed for forward-compatibility; not rendered yet.
+    pub exceeds_200k: Option<bool>,
     /// Session ID used for state file path derivation. Not rendered.
     pub session_id: Option<String>,
+    /// Claude Code version string
+    #[allow(dead_code)] // Parsed for forward-compatibility; not rendered yet.
+    pub version: Option<String>,
 }
 
 /// The full state file written by hook handlers.
@@ -64,11 +86,6 @@ pub enum AgentStatus {
 
 /// User-configurable statusline settings.
 /// Missing file is not an error -- all fields have defaults.
-///
-/// Note: `segments` and `agent_names` fields from the original spec draft
-/// were removed because the rendering logic does not currently consume them.
-/// They may be added in a future iteration when custom segment ordering and
-/// agent label overrides are implemented.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct StatuslineConfig {
@@ -118,6 +135,10 @@ pub struct Args {
     /// Override terminal width (default: $COLUMNS or 80)
     #[arg(long)]
     pub width: Option<u16>,
+
+    /// Use powerline glyphs (requires Nerd Fonts)
+    #[arg(long)]
+    pub powerline: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -161,15 +182,6 @@ fn run_inner(args: Args) -> Result<()> {
 
     // 4. Derive state file path: session-scoped if session_id present,
     //    else fall back to config default for backward compatibility.
-    //
-    //    Known limitation: when session_id is absent (e.g., running
-    //    `great statusline` manually outside Claude Code), all concurrent
-    //    invocations fall back to `config.state_file` -- a single shared path.
-    //    Multiple concurrent Claude Code sessions without session_id injection
-    //    would read/write the same file, causing cross-session contamination.
-    //    This is a known limitation of the non-session-scoped fallback and only
-    //    affects manual invocation; normal Claude Code usage always provides
-    //    session_id.
     let state_file_path = match &session.session_id {
         Some(sid)
             if !sid.is_empty()
@@ -200,6 +212,7 @@ fn run_inner(args: Args) -> Result<()> {
         &config,
         width,
         use_unicode,
+        args.powerline,
         had_parse_error,
     );
 
@@ -251,37 +264,108 @@ fn parse_stdin() -> SessionInfo {
 
 /// Parse session JSON in a schema-tolerant way.
 ///
-/// Claude Code evolves statusline payload fields over time (for example,
-/// `context_window` can be either a numeric scalar or an object with nested
-/// token counters). Parse fields independently so one incompatible field type
-/// does not wipe out the whole payload.
+/// Supports both the official Claude Code nested schema and legacy flat fields.
+/// Tries nested paths first, then falls back to flat fields for backward
+/// compatibility. Each field is parsed independently so one incompatible
+/// field type does not wipe out the whole payload.
 fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
     let root: Value = match serde_json::from_slice(input) {
         Ok(v) => v,
         Err(_) => return SessionInfo::default(),
     };
 
+    // model_name: /model/display_name -> /model as string
+    let model_name = root
+        .pointer("/model/display_name")
+        .and_then(json_string)
+        .or_else(|| root.get("model").and_then(json_string));
+
+    // model_id: /model/id
+    let model_id = root.pointer("/model/id").and_then(json_string);
+
+    // cost_usd: /cost/total_cost_usd -> /cost_usd
+    let cost_usd = root
+        .pointer("/cost/total_cost_usd")
+        .and_then(json_f64)
+        .or_else(|| root.get("cost_usd").and_then(json_f64));
+
+    // total_duration_ms: /cost/total_duration_ms
+    let total_duration_ms = root
+        .pointer("/cost/total_duration_ms")
+        .and_then(json_u64);
+
+    // lines_added: /cost/total_lines_added
+    let lines_added = root
+        .pointer("/cost/total_lines_added")
+        .and_then(json_u64);
+
+    // lines_removed: /cost/total_lines_removed
+    let lines_removed = root
+        .pointer("/cost/total_lines_removed")
+        .and_then(json_u64);
+
+    // context_tokens: sum /context_window/total_input_tokens + total_output_tokens
+    //   -> /context_tokens (flat)
+    //   -> legacy /context_window/used_tokens, /context_window/used
+    let context_tokens = {
+        let input_tokens = root
+            .pointer("/context_window/total_input_tokens")
+            .and_then(json_u64);
+        let output_tokens = root
+            .pointer("/context_window/total_output_tokens")
+            .and_then(json_u64);
+        match (input_tokens, output_tokens) {
+            (Some(i), Some(o)) => Some(i + o),
+            (Some(i), None) => Some(i),
+            (None, Some(o)) => Some(o),
+            (None, None) => root
+                .get("context_tokens")
+                .and_then(json_u64)
+                .or_else(|| root.pointer("/context_window/used_tokens").and_then(json_u64))
+                .or_else(|| root.pointer("/context_window/used").and_then(json_u64)),
+        }
+    };
+
+    // context_window: /context_window/context_window_size
+    //   -> /context_window as u64 (flat scalar)
+    //   -> /context_window/max_tokens
+    //   -> /context_window/max
+    let context_window = root
+        .pointer("/context_window/context_window_size")
+        .and_then(json_u64)
+        .or_else(|| root.get("context_window").and_then(json_u64))
+        .or_else(|| root.pointer("/context_window/max_tokens").and_then(json_u64))
+        .or_else(|| root.pointer("/context_window/max").and_then(json_u64));
+
+    // used_percentage: /context_window/used_percentage
+    let used_percentage = root
+        .pointer("/context_window/used_percentage")
+        .and_then(json_f64);
+
+    // exceeds_200k: /exceeds_200k_tokens
+    let exceeds_200k = root
+        .get("exceeds_200k_tokens")
+        .and_then(|v| v.as_bool());
+
+    // session_id: /session_id
+    let session_id = root.get("session_id").and_then(json_string);
+
+    // version: /version
+    let version = root.get("version").and_then(json_string);
+
     SessionInfo {
-        model: root.get("model").and_then(json_string),
-        cost_usd: root.get("cost_usd").and_then(json_f64),
-        context_tokens: root
-            .get("context_tokens")
-            .and_then(json_u64)
-            .or_else(|| root.pointer("/context_window/used").and_then(json_u64))
-            .or_else(|| {
-                root.pointer("/context_window/used_tokens")
-                    .and_then(json_u64)
-            }),
-        context_window: root
-            .get("context_window")
-            .and_then(json_u64)
-            .or_else(|| root.pointer("/context_window/max").and_then(json_u64))
-            .or_else(|| {
-                root.pointer("/context_window/max_tokens")
-                    .and_then(json_u64)
-            }),
-        workspace: root.get("workspace").and_then(json_string),
-        session_id: root.get("session_id").and_then(json_string),
+        model_name,
+        model_id,
+        cost_usd,
+        total_duration_ms,
+        lines_added,
+        lines_removed,
+        context_tokens,
+        context_window,
+        used_percentage,
+        exceeds_200k,
+        session_id,
+        version,
     }
 }
 
@@ -459,6 +543,8 @@ fn truncate_to_width(s: &str, max_visible: usize) -> String {
 }
 
 /// Format a token count as a human-readable string (e.g. 45230 -> "45K").
+/// Kept for potential future use even though context rendering now uses percentages.
+#[allow(dead_code)]
 fn format_tokens(tokens: u64) -> String {
     if tokens < 1000 {
         return tokens.to_string();
@@ -502,6 +588,21 @@ fn count_statuses(agents: &[AgentState]) -> StatusCounts {
 }
 
 // ---------------------------------------------------------------------------
+// Separator
+// ---------------------------------------------------------------------------
+
+/// Create the separator string based on mode flags.
+fn make_separator(use_unicode: bool, powerline: bool) -> String {
+    if powerline {
+        " \u{E0B1} ".to_string()
+    } else if use_unicode {
+        format!(" {} ", "\u{2502}".dimmed())
+    } else {
+        format!(" {} ", "|".dimmed())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Segment renderers
 // ---------------------------------------------------------------------------
 
@@ -510,28 +611,81 @@ fn render_cost(session: &SessionInfo) -> Option<String> {
     session.cost_usd.map(|c| format!("${:.2}", c))
 }
 
-/// Render context window segment with color threshold (e.g. "45K/200K").
-fn render_context(session: &SessionInfo, _use_unicode: bool) -> Option<String> {
-    let tokens = session.context_tokens?;
-    let window = session.context_window?;
+/// Render context bar with percentage.
+/// Wide (>120): [####------] 42%
+/// Medium/narrow: 42%
+fn render_context_bar(session: &SessionInfo, width: u16, use_unicode: bool) -> Option<String> {
+    // Get percentage: prefer used_percentage, fallback to calculation
+    let pct = session
+        .used_percentage
+        .or_else(|| {
+            let tokens = session.context_tokens? as f64;
+            let window = session.context_window? as f64;
+            if window == 0.0 {
+                return None;
+            }
+            Some((tokens / window) * 100.0)
+        })?;
 
-    // Avoid division by zero
-    if window == 0 {
-        return None;
-    }
+    let pct_clamped = pct.clamp(0.0, 100.0);
 
-    let ratio = tokens as f64 / window as f64;
-    let text = format!("{}/{}", format_tokens(tokens), format_tokens(window));
-
-    let colored_text = if ratio >= 0.8 {
-        text.bright_red().to_string()
-    } else if ratio >= 0.5 {
-        text.yellow().to_string()
-    } else {
-        text.green().to_string()
+    // Color based on percentage
+    let apply_color = |s: String| -> String {
+        if pct_clamped >= 80.0 {
+            s.bright_red().to_string()
+        } else if pct_clamped >= 50.0 {
+            s.yellow().to_string()
+        } else {
+            s.green().to_string()
+        }
     };
 
-    Some(colored_text)
+    if width > 120 {
+        // Wide: [####------] 42%
+        let bar_width = 10;
+        let filled = ((pct_clamped / 100.0) * bar_width as f64).round() as usize;
+        let empty = bar_width - filled;
+        let (fill_char, empty_char) = if use_unicode {
+            ("\u{2588}", "\u{2591}")
+        } else {
+            ("#", "-")
+        };
+        let bar = format!(
+            "[{}{}] {}%",
+            fill_char.repeat(filled),
+            empty_char.repeat(empty),
+            pct_clamped as u32
+        );
+        Some(apply_color(bar))
+    } else {
+        // Medium/narrow: just "42%"
+        Some(apply_color(format!("{}%", pct_clamped as u32)))
+    }
+}
+
+/// Render the model display name, dimmed.
+fn render_model(session: &SessionInfo) -> Option<String> {
+    session
+        .model_name
+        .as_ref()
+        .map(|m| m.dimmed().to_string())
+}
+
+/// Render lines changed segment (e.g. "+12 -3").
+fn render_lines_changed(session: &SessionInfo) -> Option<String> {
+    let added = session.lines_added.unwrap_or(0);
+    let removed = session.lines_removed.unwrap_or(0);
+    if added == 0 && removed == 0 {
+        return None;
+    }
+    let mut parts = Vec::new();
+    if added > 0 {
+        parts.push(format!("+{}", added).green().to_string());
+    }
+    if removed > 0 {
+        parts.push(format!("-{}", removed).red().to_string());
+    }
+    Some(parts.join(" "))
 }
 
 /// Render elapsed time since loop start (e.g. "3m42s").
@@ -630,7 +784,7 @@ fn colorize_status(text: &str, status: AgentStatus) -> String {
     }
 }
 
-/// Render the agent indicators segment (wide mode: "1\u{25CF} 2\u{25CF} 3\u{25CC} 4\u{2717}").
+/// Render the agent indicators segment (wide mode: "1X 2X 3X 4X").
 fn render_agents_wide(agents: &[AgentState], use_unicode: bool) -> String {
     let max_agents = 30;
     let mut out = String::with_capacity(agents.len() * 5);
@@ -653,7 +807,7 @@ fn render_agents_wide(agents: &[AgentState], use_unicode: bool) -> String {
     out
 }
 
-/// Render the agent indicators segment (medium mode: "\u{25CF}\u{25CF}\u{25CC}\u{2717}\u{25CF}\u{25CF}\u{25CB}\u{25CF}").
+/// Render the agent indicators segment (medium mode: compact symbols).
 fn render_agents_medium(agents: &[AgentState], use_unicode: bool) -> String {
     let max_agents = 30;
     let mut out = String::with_capacity(agents.len() * 4);
@@ -673,31 +827,39 @@ fn render_agents_medium(agents: &[AgentState], use_unicode: bool) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Three-state loop detection
+// ---------------------------------------------------------------------------
+
+/// Returns true if a loop is present (has agents or a started_at timestamp).
+fn has_loop(state: &LoopState) -> bool {
+    !state.agents.is_empty() || state.started_at.is_some()
+}
+
+/// Returns true if any agent is in an active state (Running, Queued, or Error).
+fn is_loop_active(agents: &[AgentState]) -> bool {
+    agents
+        .iter()
+        .any(|a| matches!(a.status, AgentStatus::Running | AgentStatus::Queued | AgentStatus::Error))
+}
+
+// ---------------------------------------------------------------------------
 // Main render function
 // ---------------------------------------------------------------------------
 
-/// Render a compact cost+context string for medium mode (e.g. "$0.14 45K/200K").
-/// Space-separated, no separator bars. Returns None if both are absent.
-fn render_compact_cost_context(session: &SessionInfo, use_unicode: bool) -> Option<String> {
-    let cost = render_cost(session);
-    let ctx = render_context(session, use_unicode);
-
-    match (cost, ctx) {
-        (Some(c), Some(x)) => Some(format!("{} {}", c, x)),
-        (Some(c), None) => Some(c),
-        (None, Some(x)) => Some(x),
-        (None, None) => None,
-    }
-}
-
 /// Main render function. Returns the final single-line string.
 /// The output is truncated to `width` visible columns to prevent line wrapping.
+///
+/// Three display states:
+/// - State A (no loop): session stats only
+/// - State B (loop idle): collapsed agent summary + session stats
+/// - State C (loop active): full dashboard with agent details
 fn render(
     session: &SessionInfo,
     state: &LoopState,
     _config: &StatuslineConfig,
     width: u16,
     use_unicode: bool,
+    powerline: bool,
     had_parse_error: bool,
 ) -> String {
     let mut out = String::with_capacity(256);
@@ -709,108 +871,161 @@ fn render(
         ">".bright_yellow().to_string()
     };
 
-    let sep = if use_unicode {
-        format!(" {} ", "\u{2502}".dimmed())
+    let sep = make_separator(use_unicode, powerline);
+
+    let loop_present = has_loop(state);
+    let loop_active = loop_present && is_loop_active(&state.agents);
+
+    if had_parse_error {
+        // ERR:state rendering -- same for all states
+        if loop_present {
+            let _ = write!(out, "{} {}", icon, "loop".bold());
+        } else {
+            let _ = write!(out, "{}", icon);
+        }
+        let _ = write!(out, "{}{}", sep, "ERR:state".bright_red());
+    } else if !loop_present {
+        // State A: No loop -- session stats only, no icon, no "loop" label
+        render_state_a(&mut out, session, &sep, width, use_unicode);
+    } else if !loop_active {
+        // State B: Loop idle -- collapsed summary
+        render_state_b(&mut out, session, state, &icon, &sep, width, use_unicode);
     } else {
-        format!(" {} ", "|".dimmed())
-    };
-
-    // Width mode selection
-    if width > 120 {
-        // Wide mode
-        let _ = write!(out, "{} {}", icon, "loop".bold());
-
-        if had_parse_error {
-            let _ = write!(out, "{}{}", sep, "ERR:state".bright_red());
-        } else if !state.agents.is_empty() {
-            // F3: Try wide agent indicators first; if they would overflow,
-            // fall back to medium (compact) indicators.
-            let wide_agents = render_agents_wide(&state.agents, use_unicode);
-            let summary = render_summary(&state.agents, use_unicode);
-
-            // Estimate: prefix "X loop" ~ 7 + sep(3) + agents + sep(3) + summary
-            let overhead = 7 + 3 + 3 + visible_len(&summary);
-            let agents_budget = w.saturating_sub(overhead + 20); // reserve ~20 for cost/ctx/elapsed
-
-            if visible_len(&wide_agents) <= agents_budget {
-                let _ = write!(out, "{}{}", sep, wide_agents);
-            } else {
-                // Fall back to medium-mode compact indicators
-                let _ = write!(
-                    out,
-                    "{}{}",
-                    sep,
-                    render_agents_medium(&state.agents, use_unicode)
-                );
-            }
-            let _ = write!(out, "{}{}", sep, summary);
-        } else {
-            let _ = write!(out, "{}{}", sep, "idle".dimmed());
-        }
-
-        if !had_parse_error {
-            if let Some(cost) = render_cost(session) {
-                let _ = write!(out, "{}{}", sep, cost);
-            }
-            if let Some(ctx) = render_context(session, use_unicode) {
-                let _ = write!(out, "{}{}", sep, ctx);
-            }
-            if let Some(elapsed) = render_elapsed(state) {
-                let _ = write!(out, "{}{}", sep, elapsed);
-            }
-        }
-    } else if width >= 80 {
-        // Medium mode
-        let _ = write!(out, "{} {}", icon, "loop".bold());
-
-        if had_parse_error {
-            let _ = write!(out, "{}{}", sep, "ERR:state".bright_red());
-        } else {
-            if !state.agents.is_empty() {
-                let _ = write!(
-                    out,
-                    "{}{}",
-                    sep,
-                    render_agents_medium(&state.agents, use_unicode)
-                );
-                let _ = write!(out, "{}{}", sep, render_summary(&state.agents, use_unicode));
-            } else {
-                let _ = write!(out, "{}{}", sep, "idle".dimmed());
-            }
-
-            // F1: Add compact cost+context in medium mode
-            if let Some(cc) = render_compact_cost_context(session, use_unicode) {
-                let _ = write!(out, "{}{}", sep, cc);
-            }
-
-            if let Some(elapsed) = render_elapsed(state) {
-                let _ = write!(out, "{}{}", sep, elapsed);
-            }
-        }
-    } else {
-        // Narrow mode
-        if had_parse_error {
-            let _ = write!(out, "{} {}", icon, "ERR:state".bright_red());
-        } else if !state.agents.is_empty() {
-            let summary = render_summary(&state.agents, use_unicode);
-            let _ = write!(out, "{} {}", icon, summary);
-            if let Some(elapsed) = render_elapsed(state) {
-                let _ = write!(out, "{}{}", sep, elapsed);
-            }
-        } else {
-            let _ = write!(out, "{} {}", icon, "idle".dimmed());
-            if let Some(elapsed) = render_elapsed(state) {
-                let _ = write!(out, "{}{}", sep, elapsed);
-            }
-        }
+        // State C: Loop active -- full dashboard
+        render_state_c(&mut out, session, state, &icon, &sep, width, use_unicode);
     }
 
-    // F3: Final overflow guard -- truncate to terminal width
+    // Final overflow guard -- truncate to terminal width
     if w > 0 && visible_len(&out) > w {
         out = truncate_to_width(&out, w);
     }
 
     out
+}
+
+/// State A: No loop present. Show session stats only.
+fn render_state_a(
+    out: &mut String,
+    session: &SessionInfo,
+    sep: &str,
+    width: u16,
+    use_unicode: bool,
+) {
+    let mut segments: Vec<String> = Vec::new();
+
+    if let Some(ctx) = render_context_bar(session, width, use_unicode) {
+        segments.push(ctx);
+    }
+    if let Some(cost) = render_cost(session) {
+        segments.push(cost);
+    }
+
+    if width > 120 {
+        // Wide: context bar | cost | lines changed | model
+        if let Some(lines) = render_lines_changed(session) {
+            segments.push(lines);
+        }
+        if let Some(model) = render_model(session) {
+            segments.push(model);
+        }
+    } else if width >= 80 {
+        // Medium: context % | cost | lines changed
+        if let Some(lines) = render_lines_changed(session) {
+            segments.push(lines);
+        }
+    }
+    // Narrow (<80): context % | cost
+
+    let _ = write!(out, "{}", segments.join(sep));
+}
+
+/// State B: Loop idle (all agents done). Collapsed display.
+fn render_state_b(
+    out: &mut String,
+    session: &SessionInfo,
+    state: &LoopState,
+    icon: &str,
+    sep: &str,
+    width: u16,
+    use_unicode: bool,
+) {
+    // Icon + collapsed summary
+    let summary = render_summary(&state.agents, use_unicode);
+    let _ = write!(out, "{} {}", icon, summary);
+
+    if let Some(ctx) = render_context_bar(session, width, use_unicode) {
+        let _ = write!(out, "{}{}", sep, ctx);
+    }
+    if let Some(cost) = render_cost(session) {
+        let _ = write!(out, "{}{}", sep, cost);
+    }
+
+    if width > 120 {
+        // Wide: also show lines changed + model
+        if let Some(lines) = render_lines_changed(session) {
+            let _ = write!(out, "{}{}", sep, lines);
+        }
+        if let Some(model) = render_model(session) {
+            let _ = write!(out, "{}{}", sep, model);
+        }
+    }
+}
+
+/// State C: Loop active. Full dashboard with agent details.
+fn render_state_c(
+    out: &mut String,
+    session: &SessionInfo,
+    state: &LoopState,
+    icon: &str,
+    sep: &str,
+    width: u16,
+    use_unicode: bool,
+) {
+    let _ = write!(out, "{} {}", icon, "loop".bold());
+
+    if width > 120 {
+        // Wide: icon loop | agents_wide | summary | context bar | cost | elapsed
+        let wide_agents = render_agents_wide(&state.agents, use_unicode);
+        let summary = render_summary(&state.agents, use_unicode);
+
+        // Estimate overhead for budget calculation
+        let overhead = 7 + 3 + 3 + visible_len(&summary);
+        let agents_budget = (width as usize).saturating_sub(overhead + 20);
+
+        if visible_len(&wide_agents) <= agents_budget {
+            let _ = write!(out, "{}{}", sep, wide_agents);
+        } else {
+            let _ = write!(
+                out,
+                "{}{}",
+                sep,
+                render_agents_medium(&state.agents, use_unicode)
+            );
+        }
+        let _ = write!(out, "{}{}", sep, summary);
+    } else if width >= 80 {
+        // Medium: icon loop | medium_agents summary | context % | cost | elapsed
+        let _ = write!(
+            out,
+            "{}{}",
+            sep,
+            render_agents_medium(&state.agents, use_unicode)
+        );
+        let _ = write!(out, " {}", render_summary(&state.agents, use_unicode));
+    } else {
+        // Narrow: icon summary | context % | cost
+        let _ = write!(out, "{}{}", sep, render_summary(&state.agents, use_unicode));
+    }
+
+    if let Some(ctx) = render_context_bar(session, width, use_unicode) {
+        let _ = write!(out, "{}{}", sep, ctx);
+    }
+    if let Some(cost) = render_cost(session) {
+        let _ = write!(out, "{}{}", sep, cost);
+    }
+    if let Some(elapsed) = render_elapsed(state) {
+        let _ = write!(out, "{}{}", sep, elapsed);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -825,33 +1040,37 @@ mod tests {
 
     #[test]
     fn test_parse_session_info_full() {
-        let json = r#"{"model":"claude-opus-4-6","cost_usd":0.142,"context_tokens":45230,"context_window":200000}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(info.model.as_deref(), Some("claude-opus-4-6"));
+        let json = r#"{"model":{"id":"claude-opus-4-6","display_name":"Opus 4.6"},"cost":{"total_cost_usd":0.142},"context_window":{"context_window_size":200000,"total_input_tokens":40000,"total_output_tokens":5230}}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.model_name.as_deref(), Some("Opus 4.6"));
         assert!((info.cost_usd.unwrap() - 0.142).abs() < f64::EPSILON);
+        assert_eq!(info.context_tokens, Some(45230));
+        assert_eq!(info.context_window, Some(200000));
     }
 
     #[test]
     fn test_parse_session_info_empty_json() {
-        let info: SessionInfo = serde_json::from_str("{}").unwrap();
-        assert!(info.model.is_none());
+        let info = parse_session_info_bytes(b"{}");
+        assert!(info.model_name.is_none());
         assert!(info.cost_usd.is_none());
     }
 
     #[test]
     fn test_parse_session_info_invalid_json() {
-        let info: Result<SessionInfo, _> = serde_json::from_str("not json");
-        assert!(info.is_err());
+        let info = parse_session_info_bytes(b"not json");
+        assert!(info.model_name.is_none());
+        assert!(info.cost_usd.is_none());
     }
 
     #[test]
     fn test_parse_session_info_context_window_object() {
         let json = r#"{
             "session_id": "sess-123",
-            "cost_usd": 0.12,
+            "cost":{"total_cost_usd":0.12},
             "context_window": {
-                "used_tokens": 45230,
-                "max_tokens": 200000,
+                "total_input_tokens": 40000,
+                "total_output_tokens": 5230,
+                "context_window_size": 200000,
                 "used_percentage": 22.6
             }
         }"#;
@@ -1138,8 +1357,7 @@ session_timeout_secs = 60
         colored::control::set_override(false);
         let session = SessionInfo {
             cost_usd: Some(0.14),
-            context_tokens: Some(45000),
-            context_window: Some(200000),
+            used_percentage: Some(22.5),
             ..Default::default()
         };
         let state = LoopState {
@@ -1150,46 +1368,6 @@ session_timeout_secs = 60
                     .as_secs()
                     - 222,
             ),
-            agents: vec![AgentState {
-                id: 1,
-                name: "a".into(),
-                status: AgentStatus::Done,
-                updated_at: 0,
-            }],
-            ..Default::default()
-        };
-        let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 150, true, false);
-        assert!(line.contains("loop"));
-        assert!(line.contains("$0.14"));
-        assert!(line.contains("45K/200K"));
-    }
-
-    #[test]
-    fn test_render_narrow_mode() {
-        colored::control::set_override(false);
-        let session = SessionInfo::default();
-        let state = LoopState::default();
-        let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 60, true, false);
-        assert!(!line.is_empty());
-    }
-
-    #[test]
-    fn test_render_with_parse_error() {
-        colored::control::set_override(false);
-        let session = SessionInfo::default();
-        let state = LoopState::default();
-        let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 100, true, true);
-        assert!(line.contains("ERR:state"));
-    }
-
-    #[test]
-    fn test_no_unicode_output_is_ascii_only() {
-        colored::control::set_override(false);
-        let session = SessionInfo::default();
-        let state = LoopState {
             agents: vec![
                 AgentState {
                     id: 1,
@@ -1207,7 +1385,61 @@ session_timeout_secs = 60
             ..Default::default()
         };
         let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 150, false, false);
+        let line = render(&session, &state, &config, 150, true, false, false);
+        assert!(line.contains("loop"), "active loop should show 'loop': {}", line);
+        assert!(line.contains("$0.14"), "should show cost: {}", line);
+        assert!(line.contains("22%"), "should show context %: {}", line);
+    }
+
+    #[test]
+    fn test_render_narrow_mode() {
+        colored::control::set_override(false);
+        let session = SessionInfo::default();
+        let state = LoopState::default();
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 60, true, false, false);
+        // State A with no data -- may be empty or minimal
+        assert!(visible_len(&line) <= 60);
+    }
+
+    #[test]
+    fn test_render_with_parse_error() {
+        colored::control::set_override(false);
+        let session = SessionInfo::default();
+        let state = LoopState::default();
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 100, true, false, true);
+        assert!(line.contains("ERR:state"));
+    }
+
+    #[test]
+    fn test_no_unicode_output_is_ascii_only() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            cost_usd: Some(0.14),
+            used_percentage: Some(30.0),
+            ..Default::default()
+        };
+        let state = LoopState {
+            started_at: Some(0),
+            agents: vec![
+                AgentState {
+                    id: 1,
+                    name: "a".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 2,
+                    name: "b".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 150, false, false, false);
         assert!(
             line.chars().all(|c| c.is_ascii()),
             "all characters must be ASCII: {}",
@@ -1249,42 +1481,12 @@ session_timeout_secs = 60
         assert_eq!(agents[2].status, AgentStatus::Done);
     }
 
-    // --- Context color threshold ---
-
-    #[test]
-    fn test_context_below_50_percent() {
-        colored::control::set_override(false);
-        let session = SessionInfo {
-            context_tokens: Some(40000),
-            context_window: Some(200000),
-            ..Default::default()
-        };
-        let result = render_context(&session, true);
-        assert!(result.is_some());
-        assert!(result.unwrap().contains("40K/200K"));
-    }
-
-    #[test]
-    fn test_context_window_zero() {
-        let session = SessionInfo {
-            context_tokens: Some(100),
-            context_window: Some(0),
-            ..Default::default()
-        };
-        let result = render_context(&session, true);
-        assert!(result.is_none());
-    }
-
     // --- Width resolution ---
 
     #[test]
     fn test_resolve_width_from_args() {
         assert_eq!(resolve_width(Some(120)), 120);
     }
-
-    // Note: resolve_width fallback test omitted because mutating env vars
-    // (env::remove_var) is unsound in multi-threaded test execution.
-    // The fallback logic is trivially correct and tested via integration tests.
 
     // --- Truncation at >30 agents ---
 
@@ -1300,10 +1502,8 @@ session_timeout_secs = 60
             })
             .collect();
         let result = render_agents_wide(&agents, false);
-        // Should contain agent 30 but not agent 31
         assert!(result.contains("30"));
         assert!(!result.contains("31"));
-        // Should contain ellipsis
         assert!(result.contains("..."));
     }
 
@@ -1319,7 +1519,6 @@ session_timeout_secs = 60
             })
             .collect();
         let result = render_agents_medium(&agents, true);
-        // Should contain ellipsis character
         assert!(result.contains('\u{2026}'));
     }
 
@@ -1327,81 +1526,76 @@ session_timeout_secs = 60
 
     #[test]
     fn test_read_state_rejects_path_traversal() {
-        // A path with ".." should NOT be read; it falls back to the default
-        // state file path. The key assertion: it must not read /etc/passwd.
         let (state, err) = read_state("/tmp/../etc/passwd", 30);
-        // /etc/passwd is not valid JSON, so if it were read we would get
-        // had_parse_error = true. The path traversal guard should prevent
-        // reading it entirely by substituting the default path.
-        // Since the default path may or may not exist, we only assert
-        // the traversal path was NOT read (i.e. no parse error from passwd).
         let (_default_state, _) = read_state("/tmp/great-loop/state.json", 30);
-        // If the traversal were allowed, /etc/passwd would cause a parse error.
-        // The fallback default path either doesn't exist (err=false) or has valid data.
-        // Either way, err should match what the default path produces.
         let (_, default_err) = read_state("/tmp/great-loop/state.json", 30);
         assert_eq!(
             err, default_err,
             "path traversal should fall back to default path behavior"
         );
-        // Verify agents match default path behavior too
         assert_eq!(state.agents.len(), _default_state.agents.len());
     }
 
-    // --- Idle rendering ---
+    // --- Three-state idle rendering ---
 
     #[test]
     fn test_render_idle_when_no_agents() {
+        // State A: no loop present. Should NOT show "idle" or "loop" -- just session stats.
         colored::control::set_override(false);
         let session = SessionInfo::default();
         let state = LoopState::default();
         let config = StatuslineConfig::default();
 
-        let wide = render(&session, &state, &config, 150, true, false);
-        assert!(wide.contains("idle"));
-
-        let medium = render(&session, &state, &config, 100, true, false);
-        assert!(medium.contains("idle"));
-
-        let narrow = render(&session, &state, &config, 60, true, false);
-        assert!(narrow.contains("idle"));
+        let wide = render(&session, &state, &config, 150, true, false, false);
+        assert!(
+            !wide.contains("idle"),
+            "State A should not contain 'idle': {}",
+            wide
+        );
+        assert!(
+            !wide.contains("loop"),
+            "State A should not contain 'loop': {}",
+            wide
+        );
     }
 
-    // --- F1: Medium mode includes cost+context ---
+    // --- Medium mode includes cost+context ---
 
     #[test]
     fn test_render_medium_mode_includes_cost_and_context() {
         colored::control::set_override(false);
         let session = SessionInfo {
             cost_usd: Some(0.14),
-            context_tokens: Some(45000),
-            context_window: Some(200000),
+            used_percentage: Some(22.5),
             ..Default::default()
         };
         let state = LoopState {
-            agents: vec![AgentState {
-                id: 1,
-                name: "a".into(),
-                status: AgentStatus::Done,
-                updated_at: 0,
-            }],
+            started_at: Some(0),
+            agents: vec![
+                AgentState {
+                    id: 1,
+                    name: "a".into(),
+                    status: AgentStatus::Running,
+                    updated_at: 0,
+                },
+            ],
             ..Default::default()
         };
         let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 100, true, false);
+        let line = render(&session, &state, &config, 100, true, false, false);
         assert!(
             line.contains("$0.14"),
             "medium mode must show cost: {}",
             line
         );
         assert!(
-            line.contains("45K/200K"),
-            "medium mode must show context: {}",
+            line.contains("22%"),
+            "medium mode must show context %: {}",
             line
         );
     }
 
-    // --- F2: Summary uses per-agent vocabulary ---
+    // --- Summary uses per-agent vocabulary ---
 
     #[test]
     fn test_render_summary_splits_running_and_queued() {
@@ -1421,7 +1615,6 @@ session_timeout_secs = 60
             },
         ];
         let summary = render_summary(&agents, false);
-        // ASCII: running=*, queued=. -- must be separate
         assert!(
             summary.contains('*'),
             "should show running indicator: {}",
@@ -1434,7 +1627,7 @@ session_timeout_secs = 60
         );
     }
 
-    // --- F3: Overflow guard ---
+    // --- Overflow guard ---
 
     #[test]
     fn test_visible_len_strips_ansi() {
@@ -1446,7 +1639,6 @@ session_timeout_secs = 60
     #[test]
     fn test_truncate_to_width() {
         assert_eq!(truncate_to_width("hello world", 5), "hello");
-        // ANSI codes should be preserved, visible chars truncated
         let colored = "\x1b[31mred text\x1b[0m";
         let truncated = truncate_to_width(colored, 3);
         assert!(truncated.contains("\x1b[31m"));
@@ -1466,8 +1658,7 @@ session_timeout_secs = 60
             .collect();
         let session = SessionInfo {
             cost_usd: Some(0.14),
-            context_tokens: Some(45000),
-            context_window: Some(200000),
+            used_percentage: Some(22.5),
             ..Default::default()
         };
         let state = LoopState {
@@ -1482,8 +1673,7 @@ session_timeout_secs = 60
             ..Default::default()
         };
         let config = StatuslineConfig::default();
-        // Width 130 is wide mode but tight with 25 agents
-        let line = render(&session, &state, &config, 130, false, false);
+        let line = render(&session, &state, &config, 130, false, false, false);
         assert!(
             visible_len(&line) <= 130,
             "output must not exceed width 130, got {} visible chars: {}",
@@ -1497,13 +1687,12 @@ session_timeout_secs = 60
         colored::control::set_override(false);
         let session = SessionInfo {
             cost_usd: Some(0.14),
-            context_tokens: Some(45000),
-            context_window: Some(200000),
+            used_percentage: Some(22.5),
             ..Default::default()
         };
         let state = LoopState::default();
         let config = StatuslineConfig::default();
-        let line = render(&session, &state, &config, 150, true, true);
+        let line = render(&session, &state, &config, 150, true, false, true);
         assert!(line.contains("ERR:state"));
         assert!(
             !line.contains("$0.14"),
@@ -1511,7 +1700,7 @@ session_timeout_secs = 60
             line
         );
         assert!(
-            !line.contains("45K"),
+            !line.contains("22%"),
             "context must not leak after ERR:state: {}",
             line
         );
@@ -1520,7 +1709,7 @@ session_timeout_secs = 60
     #[test]
     fn test_session_info_with_session_id() {
         let json = r#"{"session_id":"abc-123","cost_usd":0.5}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        let info = parse_session_info_bytes(json.as_bytes());
         assert_eq!(info.session_id.as_deref(), Some("abc-123"));
         assert!((info.cost_usd.unwrap() - 0.5).abs() < f64::EPSILON);
     }
@@ -1528,7 +1717,7 @@ session_timeout_secs = 60
     #[test]
     fn test_session_info_without_session_id() {
         let json = r#"{"cost_usd":0.5}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
+        let info = parse_session_info_bytes(json.as_bytes());
         assert!(info.session_id.is_none());
     }
 
@@ -1541,7 +1730,325 @@ session_timeout_secs = 60
 
     #[test]
     fn test_cleanup_stale_sessions_no_crash_on_missing_dir() {
-        // /tmp/great-loop/ may not exist -- cleanup must not panic
         cleanup_stale_sessions();
+    }
+
+    // --- New tests for official schema support ---
+
+    #[test]
+    fn test_parse_official_schema() {
+        let json = r#"{"model":{"id":"claude-opus-4-6","display_name":"Opus 4.6"},"cost":{"total_cost_usd":0.14,"total_duration_ms":5000,"total_lines_added":12,"total_lines_removed":3},"context_window":{"context_window_size":200000,"total_input_tokens":80000,"total_output_tokens":4000,"used_percentage":42.0},"session_id":"sess-1","version":"1.0.0"}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.model_name.as_deref(), Some("Opus 4.6"));
+        assert_eq!(info.model_id.as_deref(), Some("claude-opus-4-6"));
+        assert!((info.cost_usd.unwrap() - 0.14).abs() < f64::EPSILON);
+        assert_eq!(info.total_duration_ms, Some(5000));
+        assert_eq!(info.lines_added, Some(12));
+        assert_eq!(info.lines_removed, Some(3));
+        assert_eq!(info.context_tokens, Some(84000)); // 80000 + 4000
+        assert_eq!(info.context_window, Some(200000));
+        assert!((info.used_percentage.unwrap() - 42.0).abs() < f64::EPSILON);
+        assert_eq!(info.session_id.as_deref(), Some("sess-1"));
+        assert_eq!(info.version.as_deref(), Some("1.0.0"));
+    }
+
+    #[test]
+    fn test_parse_backward_compat_flat() {
+        let json = r#"{"model":"claude-opus-4-6","cost_usd":0.14,"context_tokens":45000,"context_window":200000}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.model_name.as_deref(), Some("claude-opus-4-6"));
+        assert!((info.cost_usd.unwrap() - 0.14).abs() < f64::EPSILON);
+        assert_eq!(info.context_tokens, Some(45000));
+        assert_eq!(info.context_window, Some(200000));
+    }
+
+    #[test]
+    fn test_parse_model_nested_object() {
+        let json = r#"{"model":{"id":"claude-opus-4-6","display_name":"Opus 4.6"}}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.model_name.as_deref(), Some("Opus 4.6"));
+        assert_eq!(info.model_id.as_deref(), Some("claude-opus-4-6"));
+    }
+
+    #[test]
+    fn test_parse_cost_nested() {
+        let json = r#"{"cost":{"total_cost_usd":1.23}}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert!((info.cost_usd.unwrap() - 1.23).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_render_context_bar_green() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            used_percentage: Some(30.0),
+            ..Default::default()
+        };
+        let result = render_context_bar(&session, 150, true);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert!(r.contains("30%"), "should contain 30%: {}", r);
+        assert!(
+            r.contains('\u{2588}'),
+            "wide mode should have bar: {}",
+            r
+        );
+    }
+
+    #[test]
+    fn test_render_context_bar_yellow() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            used_percentage: Some(65.0),
+            ..Default::default()
+        };
+        let result = render_context_bar(&session, 150, true);
+        assert!(result.unwrap().contains("65%"));
+    }
+
+    #[test]
+    fn test_render_context_bar_red() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            used_percentage: Some(85.0),
+            ..Default::default()
+        };
+        let result = render_context_bar(&session, 150, true);
+        assert!(result.unwrap().contains("85%"));
+    }
+
+    #[test]
+    fn test_render_context_bar_ascii() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            used_percentage: Some(50.0),
+            ..Default::default()
+        };
+        let result = render_context_bar(&session, 150, false);
+        let r = result.unwrap();
+        assert!(r.contains('#'), "ASCII mode should use # for filled: {}", r);
+        assert!(
+            r.contains('-'),
+            "ASCII mode should use - for empty: {}",
+            r
+        );
+    }
+
+    #[test]
+    fn test_render_context_bar_medium_no_bar() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            used_percentage: Some(42.0),
+            ..Default::default()
+        };
+        let result = render_context_bar(&session, 100, true);
+        let r = result.unwrap();
+        assert!(r.contains("42%"));
+        assert!(
+            !r.contains('\u{2588}'),
+            "medium mode should not have bar: {}",
+            r
+        );
+    }
+
+    #[test]
+    fn test_render_lines_changed() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            lines_added: Some(12),
+            lines_removed: Some(3),
+            ..Default::default()
+        };
+        let result = render_lines_changed(&session);
+        let r = result.unwrap();
+        assert!(r.contains("+12"), "should contain +12: {}", r);
+        assert!(r.contains("-3"), "should contain -3: {}", r);
+    }
+
+    #[test]
+    fn test_render_lines_changed_zero() {
+        let session = SessionInfo::default();
+        assert!(render_lines_changed(&session).is_none());
+    }
+
+    #[test]
+    fn test_render_model_display() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            model_name: Some("Opus 4.6".to_string()),
+            ..Default::default()
+        };
+        let result = render_model(&session);
+        assert!(result.unwrap().contains("Opus 4.6"));
+    }
+
+    #[test]
+    fn test_render_no_loop_state() {
+        // State A: no agents, no started_at -> no icon, no "loop" label
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            cost_usd: Some(0.14),
+            used_percentage: Some(42.0),
+            ..Default::default()
+        };
+        let state = LoopState::default();
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 150, true, false, false);
+        assert!(
+            !line.contains("loop"),
+            "State A should not contain 'loop': {}",
+            line
+        );
+        assert!(
+            line.contains("$0.14"),
+            "State A should show cost: {}",
+            line
+        );
+        assert!(
+            line.contains("42%"),
+            "State A should show context %: {}",
+            line
+        );
+    }
+
+    #[test]
+    fn test_render_loop_idle_collapsed() {
+        // State B: all agents done -> collapsed display
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            cost_usd: Some(0.14),
+            used_percentage: Some(42.0),
+            ..Default::default()
+        };
+        let state = LoopState {
+            started_at: Some(0),
+            agents: vec![
+                AgentState {
+                    id: 1,
+                    name: "a".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 2,
+                    name: "b".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 3,
+                    name: "c".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 150, true, false, false);
+        assert!(
+            line.contains('3'),
+            "State B should show done count: {}",
+            line
+        );
+        assert!(
+            line.contains('\u{2713}'),
+            "State B should show done symbol: {}",
+            line
+        );
+        assert!(
+            !line.contains("loop"),
+            "State B should not contain 'loop': {}",
+            line
+        );
+    }
+
+    #[test]
+    fn test_render_loop_active_expanded() {
+        // State C: running agents -> full dashboard
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            cost_usd: Some(0.14),
+            used_percentage: Some(42.0),
+            ..Default::default()
+        };
+        let state = LoopState {
+            started_at: Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    - 222,
+            ),
+            agents: vec![
+                AgentState {
+                    id: 1,
+                    name: "a".into(),
+                    status: AgentStatus::Done,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 2,
+                    name: "b".into(),
+                    status: AgentStatus::Running,
+                    updated_at: 0,
+                },
+                AgentState {
+                    id: 3,
+                    name: "c".into(),
+                    status: AgentStatus::Queued,
+                    updated_at: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 150, true, false, false);
+        assert!(
+            line.contains("loop"),
+            "State C should contain 'loop': {}",
+            line
+        );
+        assert!(
+            line.contains("$0.14"),
+            "State C should show cost: {}",
+            line
+        );
+    }
+
+    #[test]
+    fn test_used_percentage_direct() {
+        let json =
+            r#"{"context_window":{"used_percentage":42.5,"context_window_size":200000}}"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert!((info.used_percentage.unwrap() - 42.5).abs() < f64::EPSILON);
+        assert_eq!(info.context_window, Some(200000));
+    }
+
+    #[test]
+    fn test_powerline_separator() {
+        colored::control::set_override(false);
+        let session = SessionInfo {
+            cost_usd: Some(0.14),
+            used_percentage: Some(42.0),
+            ..Default::default()
+        };
+        let state = LoopState {
+            started_at: Some(0),
+            agents: vec![AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Done,
+                updated_at: 0,
+            }],
+            ..Default::default()
+        };
+        let config = StatuslineConfig::default();
+        let line = render(&session, &state, &config, 150, true, true, false);
+        assert!(
+            line.contains('\u{E0B1}'),
+            "powerline mode should use chevron: {}",
+            line
+        );
     }
 }

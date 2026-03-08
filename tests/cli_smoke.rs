@@ -1118,7 +1118,7 @@ fn statusline_context_window_object_preserves_session_state_lookup() {
     let output = great()
         .args(["statusline", "--width", "120", "--no-color", "--no-unicode"])
         .write_stdin(format!(
-            r#"{{"session_id":"{}","cost_usd":0.12,"context_window":{{"used_tokens":1000,"max_tokens":200000,"used_percentage":0.5}}}}"#,
+            r#"{{"session_id":"{}","cost_usd":0.12,"context_window":{{"used_tokens":1000,"max_tokens":200000,"used_percentage":50.0,"context_window_size":200000}}}}"#,
             session_id
         ))
         .output()
@@ -1134,8 +1134,8 @@ fn statusline_context_window_object_preserves_session_state_lookup() {
         stdout
     );
     assert!(
-        stdout.contains("1K/200K"),
-        "context usage should render from object payload: {}",
+        stdout.contains("50%"),
+        "context usage should render percentage from object payload: {}",
         stdout
     );
 }
@@ -1437,9 +1437,11 @@ fn statusline_absent_state_file_renders_idle() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
+    // With three-state display, absent state file = State A (no loop).
+    // No "idle" or "loop" label is shown -- just session stats (if any).
     assert!(
-        stdout.contains("idle"),
-        "absent state file should render 'idle': {}",
+        !stdout.contains("loop"),
+        "absent state file should not show 'loop': {}",
         stdout
     );
 }
@@ -1949,8 +1951,8 @@ fn statusline_with_state_file_renders_agents() {
     );
     assert!(stdout.contains("$1.50"), "should contain cost: {}", stdout);
     assert!(
-        stdout.contains("90K/200K"),
-        "should contain context: {}",
+        stdout.contains("45%"),
+        "should contain context percentage: {}",
         stdout
     );
 }
