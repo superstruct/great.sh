@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::Args as ClapArgs;
 use colored::Colorize;
 use serde::Deserialize;
+use serde_json::Value;
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -245,7 +246,70 @@ fn parse_stdin() -> SessionInfo {
         return SessionInfo::default();
     }
 
-    serde_json::from_slice(&buf).unwrap_or_default()
+    parse_session_info_bytes(&buf)
+}
+
+/// Parse session JSON in a schema-tolerant way.
+///
+/// Claude Code evolves statusline payload fields over time (for example,
+/// `context_window` can be either a numeric scalar or an object with nested
+/// token counters). Parse fields independently so one incompatible field type
+/// does not wipe out the whole payload.
+fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
+    let root: Value = match serde_json::from_slice(input) {
+        Ok(v) => v,
+        Err(_) => return SessionInfo::default(),
+    };
+
+    SessionInfo {
+        model: root.get("model").and_then(json_string),
+        cost_usd: root.get("cost_usd").and_then(json_f64),
+        context_tokens: root
+            .get("context_tokens")
+            .and_then(json_u64)
+            .or_else(|| root.pointer("/context_window/used").and_then(json_u64))
+            .or_else(|| {
+                root.pointer("/context_window/used_tokens")
+                    .and_then(json_u64)
+            }),
+        context_window: root
+            .get("context_window")
+            .and_then(json_u64)
+            .or_else(|| root.pointer("/context_window/max").and_then(json_u64))
+            .or_else(|| {
+                root.pointer("/context_window/max_tokens")
+                    .and_then(json_u64)
+            }),
+        workspace: root.get("workspace").and_then(json_string),
+        session_id: root.get("session_id").and_then(json_string),
+    }
+}
+
+/// Parse a JSON value into a UTF-8 string.
+fn json_string(v: &Value) -> Option<String> {
+    v.as_str().map(ToString::to_string)
+}
+
+/// Parse a JSON value into a non-negative integer token count.
+fn json_u64(v: &Value) -> Option<u64> {
+    if let Some(n) = v.as_u64() {
+        return Some(n);
+    }
+    if let Some(n) = v.as_i64() {
+        return (n >= 0).then_some(n as u64);
+    }
+    if let Some(n) = v.as_f64() {
+        return (n.is_finite() && n >= 0.0).then_some(n as u64);
+    }
+    v.as_str()?.parse::<u64>().ok()
+}
+
+/// Parse a JSON value into a floating-point number.
+fn json_f64(v: &Value) -> Option<f64> {
+    if let Some(n) = v.as_f64() {
+        return Some(n);
+    }
+    v.as_str()?.parse::<f64>().ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -778,6 +842,36 @@ mod tests {
     fn test_parse_session_info_invalid_json() {
         let info: Result<SessionInfo, _> = serde_json::from_str("not json");
         assert!(info.is_err());
+    }
+
+    #[test]
+    fn test_parse_session_info_context_window_object() {
+        let json = r#"{
+            "session_id": "sess-123",
+            "cost_usd": 0.12,
+            "context_window": {
+                "used_tokens": 45230,
+                "max_tokens": 200000,
+                "used_percentage": 22.6
+            }
+        }"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.session_id.as_deref(), Some("sess-123"));
+        assert!((info.cost_usd.unwrap() - 0.12).abs() < f64::EPSILON);
+        assert_eq!(info.context_tokens, Some(45230));
+        assert_eq!(info.context_window, Some(200000));
+    }
+
+    #[test]
+    fn test_parse_session_info_keeps_session_id_on_partial_schema_mismatch() {
+        let json = r#"{
+            "session_id": "sess-456",
+            "context_window": {"used_percentage": 50}
+        }"#;
+        let info = parse_session_info_bytes(json.as_bytes());
+        assert_eq!(info.session_id.as_deref(), Some("sess-456"));
+        assert_eq!(info.context_tokens, None);
+        assert_eq!(info.context_window, None);
     }
 
     #[test]

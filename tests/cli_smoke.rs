@@ -1087,6 +1087,60 @@ fn statusline_with_state_file() {
 }
 
 #[test]
+fn statusline_context_window_object_preserves_session_state_lookup() {
+    let session_id = format!(
+        "statusline-ctxobj-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    );
+    let state_dir = std::path::Path::new("/tmp/great-loop").join(&session_id);
+    let _ = std::fs::remove_dir_all(&state_dir);
+    std::fs::create_dir_all(&state_dir).unwrap();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    std::fs::write(
+        state_dir.join("state.json"),
+        format!(
+            r#"{{"loop_id":"{}","started_at":{},"agents":[{{"id":1,"name":"nightingale","status":"running","updated_at":{}}}]}}"#,
+            session_id,
+            now - 30,
+            now
+        ),
+    )
+    .unwrap();
+
+    let output = great()
+        .args(["statusline", "--width", "120", "--no-color", "--no-unicode"])
+        .write_stdin(format!(
+            r#"{{"session_id":"{}","cost_usd":0.12,"context_window":{{"used_tokens":1000,"max_tokens":200000,"used_percentage":0.5}}}}"#,
+            session_id
+        ))
+        .output()
+        .expect("failed to run");
+
+    let _ = std::fs::remove_dir_all(&state_dir);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("idle"),
+        "session-scoped state should be read even with context_window object: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("1K/200K"),
+        "context usage should render from object payload: {}",
+        stdout
+    );
+}
+
+#[test]
 fn statusline_help_shows_description() {
     great()
         .args(["statusline", "--help"])
