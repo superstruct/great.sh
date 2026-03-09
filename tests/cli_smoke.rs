@@ -1765,8 +1765,18 @@ fn loop_install_force_fresh_succeeds() {
         .assert()
         .success();
 
-    assert!(dir.path().join(".claude/agents/nightingale.md").exists());
-    assert!(dir.path().join(".claude/commands/loop.md").exists());
+    assert!(dir
+        .path()
+        .join(".claude/plugins/great/agents/nightingale.md")
+        .exists());
+    assert!(dir
+        .path()
+        .join(".claude/plugins/great/skills/loop/SKILL.md")
+        .exists());
+    assert!(dir
+        .path()
+        .join(".claude/plugins/great/.claude-plugin/plugin.json")
+        .exists());
     assert!(dir.path().join(".claude/teams/loop/config.json").exists());
 }
 
@@ -1803,7 +1813,9 @@ fn loop_install_force_overwrites_existing() {
         .success();
 
     // Modify a file to prove it gets overwritten
-    let agent_path = dir.path().join(".claude/agents/nightingale.md");
+    let agent_path = dir
+        .path()
+        .join(".claude/plugins/great/agents/nightingale.md");
     std::fs::write(&agent_path, "user customization").unwrap();
 
     // Second install with --force
@@ -1867,8 +1879,10 @@ fn loop_install_force_writes_hook_script() {
         .assert()
         .success();
 
-    let hook = dir.path().join(".claude/hooks/great-loop/update-state.sh");
-    assert!(hook.exists(), "hook script must be written");
+    let hook = dir
+        .path()
+        .join(".claude/plugins/great/scripts/update-state.sh");
+    assert!(hook.exists(), "hook script must be written in plugin dir");
 }
 
 #[test]
@@ -1884,13 +1898,70 @@ fn loop_install_force_writes_settings_json() {
     assert!(settings.exists(), "settings.json must be created");
     let content = std::fs::read_to_string(&settings).unwrap();
     assert!(
-        content.contains("hooks"),
-        "settings.json must contain hooks configuration"
+        !content.contains("great-loop/update-state.sh"),
+        "settings.json must NOT contain hooks (moved to plugin)"
     );
     assert!(
         content.contains("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"),
         "settings.json must contain agent teams env"
     );
+    assert!(
+        content.contains("statusLine"),
+        "settings.json must contain statusLine"
+    );
+}
+
+#[test]
+fn loop_install_migrates_legacy_files() {
+    let dir = TempDir::new().unwrap();
+    let claude_dir = dir.path().join(".claude");
+
+    // Create legacy files
+    let agents_dir = claude_dir.join("agents");
+    let commands_dir = claude_dir.join("commands");
+    let hooks_dir = claude_dir.join("hooks").join("great-loop");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    std::fs::create_dir_all(&commands_dir).unwrap();
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+    std::fs::write(agents_dir.join("nightingale.md"), "legacy").unwrap();
+    std::fs::write(commands_dir.join("loop.md"), "legacy").unwrap();
+    std::fs::write(hooks_dir.join("update-state.sh"), "legacy").unwrap();
+
+    // Run install
+    great()
+        .args(["loop", "install", "--force"])
+        .env("HOME", dir.path())
+        .assert()
+        .success();
+
+    // Legacy files should be removed
+    assert!(
+        !claude_dir.join("agents").join("nightingale.md").exists(),
+        "legacy agent file should be removed"
+    );
+    assert!(
+        !claude_dir.join("commands").join("loop.md").exists(),
+        "legacy command file should be removed"
+    );
+    assert!(
+        !claude_dir
+            .join("hooks")
+            .join("great-loop")
+            .join("update-state.sh")
+            .exists(),
+        "legacy hook script should be removed"
+    );
+
+    // Plugin files should be installed
+    assert!(claude_dir
+        .join("plugins/great/agents/nightingale.md")
+        .exists());
+    assert!(claude_dir
+        .join("plugins/great/skills/loop/SKILL.md")
+        .exists());
+    assert!(claude_dir
+        .join("plugins/great/.claude-plugin/plugin.json")
+        .exists());
 }
 
 #[test]

@@ -1,0 +1,9 @@
+{
+  "plugins": [
+    {
+      "name": "great",
+      "description": "great.sh Loop — 16-role AI agent orchestration",
+      "directory": "loop"
+    }
+  ]
+}

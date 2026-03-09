@@ -1,0 +1,8 @@
+{
+  "SubagentStart": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}],
+  "SubagentStop": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}],
+  "TeammateIdle": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}],
+  "TaskCompleted": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}],
+  "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}],
+  "SessionEnd": [{"matcher": "", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh", "async": true}]}]
+}

@@ -13,7 +13,7 @@ fn test_hook_writes_state_and_statusline_reads_it() {
 
     // Find the hook script (built from source)
     let hook_script =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("loop/hooks/update-state.sh");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("loop/scripts/update-state.sh");
 
     if !hook_script.exists() {
         eprintln!(
