@@ -290,19 +290,13 @@ fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
         .or_else(|| root.get("cost_usd").and_then(json_f64));
 
     // total_duration_ms: /cost/total_duration_ms
-    let total_duration_ms = root
-        .pointer("/cost/total_duration_ms")
-        .and_then(json_u64);
+    let total_duration_ms = root.pointer("/cost/total_duration_ms").and_then(json_u64);
 
     // lines_added: /cost/total_lines_added
-    let lines_added = root
-        .pointer("/cost/total_lines_added")
-        .and_then(json_u64);
+    let lines_added = root.pointer("/cost/total_lines_added").and_then(json_u64);
 
     // lines_removed: /cost/total_lines_removed
-    let lines_removed = root
-        .pointer("/cost/total_lines_removed")
-        .and_then(json_u64);
+    let lines_removed = root.pointer("/cost/total_lines_removed").and_then(json_u64);
 
     // context_tokens: sum /context_window/total_input_tokens + total_output_tokens
     //   -> /context_tokens (flat)
@@ -321,7 +315,10 @@ fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
             (None, None) => root
                 .get("context_tokens")
                 .and_then(json_u64)
-                .or_else(|| root.pointer("/context_window/used_tokens").and_then(json_u64))
+                .or_else(|| {
+                    root.pointer("/context_window/used_tokens")
+                        .and_then(json_u64)
+                })
                 .or_else(|| root.pointer("/context_window/used").and_then(json_u64)),
         }
     };
@@ -334,7 +331,10 @@ fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
         .pointer("/context_window/context_window_size")
         .and_then(json_u64)
         .or_else(|| root.get("context_window").and_then(json_u64))
-        .or_else(|| root.pointer("/context_window/max_tokens").and_then(json_u64))
+        .or_else(|| {
+            root.pointer("/context_window/max_tokens")
+                .and_then(json_u64)
+        })
         .or_else(|| root.pointer("/context_window/max").and_then(json_u64));
 
     // used_percentage: /context_window/used_percentage
@@ -343,9 +343,7 @@ fn parse_session_info_bytes(input: &[u8]) -> SessionInfo {
         .and_then(json_f64);
 
     // exceeds_200k: /exceeds_200k_tokens
-    let exceeds_200k = root
-        .get("exceeds_200k_tokens")
-        .and_then(|v| v.as_bool());
+    let exceeds_200k = root.get("exceeds_200k_tokens").and_then(|v| v.as_bool());
 
     // session_id: /session_id
     let session_id = root.get("session_id").and_then(json_string);
@@ -616,16 +614,14 @@ fn render_cost(session: &SessionInfo) -> Option<String> {
 /// Medium/narrow: 42%
 fn render_context_bar(session: &SessionInfo, width: u16, use_unicode: bool) -> Option<String> {
     // Get percentage: prefer used_percentage, fallback to calculation
-    let pct = session
-        .used_percentage
-        .or_else(|| {
-            let tokens = session.context_tokens? as f64;
-            let window = session.context_window? as f64;
-            if window == 0.0 {
-                return None;
-            }
-            Some((tokens / window) * 100.0)
-        })?;
+    let pct = session.used_percentage.or_else(|| {
+        let tokens = session.context_tokens? as f64;
+        let window = session.context_window? as f64;
+        if window == 0.0 {
+            return None;
+        }
+        Some((tokens / window) * 100.0)
+    })?;
 
     let pct_clamped = pct.clamp(0.0, 100.0);
 
@@ -665,10 +661,7 @@ fn render_context_bar(session: &SessionInfo, width: u16, use_unicode: bool) -> O
 
 /// Render the model display name, dimmed.
 fn render_model(session: &SessionInfo) -> Option<String> {
-    session
-        .model_name
-        .as_ref()
-        .map(|m| m.dimmed().to_string())
+    session.model_name.as_ref().map(|m| m.dimmed().to_string())
 }
 
 /// Render lines changed segment (e.g. "+12 -3").
@@ -837,9 +830,12 @@ fn has_loop(state: &LoopState) -> bool {
 
 /// Returns true if any agent is in an active state (Running, Queued, or Error).
 fn is_loop_active(agents: &[AgentState]) -> bool {
-    agents
-        .iter()
-        .any(|a| matches!(a.status, AgentStatus::Running | AgentStatus::Queued | AgentStatus::Error))
+    agents.iter().any(|a| {
+        matches!(
+            a.status,
+            AgentStatus::Running | AgentStatus::Queued | AgentStatus::Error
+        )
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1386,7 +1382,11 @@ session_timeout_secs = 60
         };
         let config = StatuslineConfig::default();
         let line = render(&session, &state, &config, 150, true, false, false);
-        assert!(line.contains("loop"), "active loop should show 'loop': {}", line);
+        assert!(
+            line.contains("loop"),
+            "active loop should show 'loop': {}",
+            line
+        );
         assert!(line.contains("$0.14"), "should show cost: {}", line);
         assert!(line.contains("22%"), "should show context %: {}", line);
     }
@@ -1571,14 +1571,12 @@ session_timeout_secs = 60
         };
         let state = LoopState {
             started_at: Some(0),
-            agents: vec![
-                AgentState {
-                    id: 1,
-                    name: "a".into(),
-                    status: AgentStatus::Running,
-                    updated_at: 0,
-                },
-            ],
+            agents: vec![AgentState {
+                id: 1,
+                name: "a".into(),
+                status: AgentStatus::Running,
+                updated_at: 0,
+            }],
             ..Default::default()
         };
         let config = StatuslineConfig::default();
@@ -1788,11 +1786,7 @@ session_timeout_secs = 60
         assert!(result.is_some());
         let r = result.unwrap();
         assert!(r.contains("30%"), "should contain 30%: {}", r);
-        assert!(
-            r.contains('\u{2588}'),
-            "wide mode should have bar: {}",
-            r
-        );
+        assert!(r.contains('\u{2588}'), "wide mode should have bar: {}", r);
     }
 
     #[test]
@@ -1827,11 +1821,7 @@ session_timeout_secs = 60
         let result = render_context_bar(&session, 150, false);
         let r = result.unwrap();
         assert!(r.contains('#'), "ASCII mode should use # for filled: {}", r);
-        assert!(
-            r.contains('-'),
-            "ASCII mode should use - for empty: {}",
-            r
-        );
+        assert!(r.contains('-'), "ASCII mode should use - for empty: {}", r);
     }
 
     #[test]
@@ -1899,11 +1889,7 @@ session_timeout_secs = 60
             "State A should not contain 'loop': {}",
             line
         );
-        assert!(
-            line.contains("$0.14"),
-            "State A should show cost: {}",
-            line
-        );
+        assert!(line.contains("$0.14"), "State A should show cost: {}", line);
         assert!(
             line.contains("42%"),
             "State A should show context %: {}",
@@ -2009,17 +1995,12 @@ session_timeout_secs = 60
             "State C should contain 'loop': {}",
             line
         );
-        assert!(
-            line.contains("$0.14"),
-            "State C should show cost: {}",
-            line
-        );
+        assert!(line.contains("$0.14"), "State C should show cost: {}", line);
     }
 
     #[test]
     fn test_used_percentage_direct() {
-        let json =
-            r#"{"context_window":{"used_percentage":42.5,"context_window_size":200000}}"#;
+        let json = r#"{"context_window":{"used_percentage":42.5,"context_window_size":200000}}"#;
         let info = parse_session_info_bytes(json.as_bytes());
         assert!((info.used_percentage.unwrap() - 42.5).abs() < f64::EPSILON);
         assert_eq!(info.context_window, Some(200000));

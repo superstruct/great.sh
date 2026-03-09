@@ -317,10 +317,7 @@ fn migrate_legacy_install(claude_dir: &std::path::Path) -> Result<MigrationResul
         remove_hooks_from_settings(&settings_path)?;
     }
 
-    output::success(&format!(
-        "Removed {} legacy files/directories",
-        removed
-    ));
+    output::success(&format!("Removed {} legacy files/directories", removed));
 
     Ok(MigrationResult {
         migrated: true,
@@ -334,8 +331,8 @@ fn remove_hooks_from_settings(settings_path: &std::path::Path) -> Result<bool> {
         return Ok(false);
     }
 
-    let contents = std::fs::read_to_string(settings_path)
-        .context("failed to read settings.json")?;
+    let contents =
+        std::fs::read_to_string(settings_path).context("failed to read settings.json")?;
     let mut val: serde_json::Value = match serde_json::from_str(&contents) {
         Ok(v) => v,
         Err(_) => return Ok(false),
@@ -381,10 +378,9 @@ fn remove_hooks_from_settings(settings_path: &std::path::Path) -> Result<bool> {
         }
 
         if modified {
-            let formatted = serde_json::to_string_pretty(&val)
-                .context("failed to serialize settings.json")?;
-            std::fs::write(settings_path, formatted)
-                .context("failed to write settings.json")?;
+            let formatted =
+                serde_json::to_string_pretty(&val).context("failed to serialize settings.json")?;
+            std::fs::write(settings_path, formatted).context("failed to write settings.json")?;
         }
     }
 
@@ -398,8 +394,8 @@ fn migrate_claude_md(claude_dir: &std::path::Path) -> Result<()> {
         return Ok(());
     }
 
-    let contents = std::fs::read_to_string(&claude_md_path)
-        .context("failed to read ~/.claude/CLAUDE.md")?;
+    let contents =
+        std::fs::read_to_string(&claude_md_path).context("failed to read ~/.claude/CLAUDE.md")?;
 
     if contents.trim() == LEGACY_CLAUDE_MD.trim() {
         std::fs::remove_file(&claude_md_path)
@@ -440,10 +436,7 @@ fn collect_existing_paths(claude_dir: &std::path::Path) -> Vec<std::path::PathBu
 
     // Check skill files in plugin dir
     for skill in SKILLS {
-        let path = plugin_dir
-            .join("skills")
-            .join(skill.name)
-            .join("SKILL.md");
+        let path = plugin_dir.join("skills").join(skill.name).join("SKILL.md");
         if path.exists() {
             existing.push(path);
         }
@@ -587,8 +580,7 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
 
     // Write plugin manifest
     let manifest_path = plugin_manifest_dir.join("plugin.json");
-    std::fs::write(&manifest_path, PLUGIN_MANIFEST)
-        .context("failed to write plugin.json")?;
+    std::fs::write(&manifest_path, PLUGIN_MANIFEST).context("failed to write plugin.json")?;
     output::success("Plugin manifest -> ~/.claude/plugins/great/.claude-plugin/plugin.json");
 
     // Write agent files
@@ -604,10 +596,7 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
 
     // Write skill files
     for skill in SKILLS {
-        let path = plugin_dir
-            .join("skills")
-            .join(skill.name)
-            .join("SKILL.md");
+        let path = plugin_dir.join("skills").join(skill.name).join("SKILL.md");
         std::fs::write(&path, skill.content)
             .with_context(|| format!("failed to write skill file: {}", path.display()))?;
     }
@@ -618,14 +607,12 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
 
     // Write hooks.json
     let hooks_json_path = plugin_hooks_dir.join("hooks.json");
-    std::fs::write(&hooks_json_path, HOOKS_JSON)
-        .context("failed to write hooks.json")?;
+    std::fs::write(&hooks_json_path, HOOKS_JSON).context("failed to write hooks.json")?;
     output::success("Hooks config -> ~/.claude/plugins/great/hooks/hooks.json");
 
     // Write hook handler script
     let hook_script_path = plugin_scripts_dir.join("update-state.sh");
-    std::fs::write(&hook_script_path, HOOK_UPDATE_STATE)
-        .context("failed to write hook script")?;
+    std::fs::write(&hook_script_path, HOOK_UPDATE_STATE).context("failed to write hook script")?;
 
     // Make executable (Unix only)
     #[cfg(unix)]
@@ -646,8 +633,7 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
         .context("failed to write observer-template.md")?;
 
     let teams_cfg_path = plugin_dir.join("teams-config.json");
-    std::fs::write(&teams_cfg_path, TEAMS_CONFIG)
-        .context("failed to write teams-config.json")?;
+    std::fs::write(&teams_cfg_path, TEAMS_CONFIG).context("failed to write teams-config.json")?;
 
     // --- Phase 3: Side-effects outside plugin ---
 
@@ -762,9 +748,7 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
                         // No hooks key at all — just handle statusLine
                         let needs_statusline = if !obj.contains_key("statusLine") {
                             true
-                        } else if let Some(sl) =
-                            obj.get("statusLine").and_then(|v| v.as_object())
-                        {
+                        } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
                             !sl.contains_key("type")
                         } else {
                             false
@@ -818,9 +802,7 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
             .context("failed to serialize default settings")?;
         std::fs::write(&settings_path, formatted)
             .context("failed to write ~/.claude/settings.json")?;
-        output::success(
-            "Settings with Agent Teams and statusLine -> ~/.claude/settings.json",
-        );
+        output::success("Settings with Agent Teams and statusLine -> ~/.claude/settings.json");
     }
 
     // Project working state
@@ -891,7 +873,10 @@ fn run_status() -> Result<()> {
     println!();
 
     // Check plugin manifest
-    let plugin_ok = plugin_dir.join(".claude-plugin").join("plugin.json").exists();
+    let plugin_ok = plugin_dir
+        .join(".claude-plugin")
+        .join("plugin.json")
+        .exists();
     if plugin_ok {
         output::success("Plugin manifest: installed");
     } else {
@@ -907,7 +892,11 @@ fn run_status() -> Result<()> {
     }
 
     // Check key skill file in plugin dir
-    let skills_ok = plugin_dir.join("skills").join("loop").join("SKILL.md").exists();
+    let skills_ok = plugin_dir
+        .join("skills")
+        .join("loop")
+        .join("SKILL.md")
+        .exists();
     if skills_ok {
         output::success("Plugin skills: installed");
     } else {
@@ -1059,8 +1048,8 @@ fn run_uninstall() -> Result<()> {
     // Clean settings.json (remove env var, statusLine, and any leftover hooks)
     let settings_path = claude_dir.join("settings.json");
     if settings_path.exists() {
-        let contents = std::fs::read_to_string(&settings_path)
-            .context("failed to read settings.json")?;
+        let contents =
+            std::fs::read_to_string(&settings_path).context("failed to read settings.json")?;
         if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&contents) {
             if let Some(obj) = val.as_object_mut() {
                 let mut modified = false;
@@ -1467,8 +1456,7 @@ mod tests {
 
     #[test]
     fn test_hooks_json_has_all_events() {
-        let parsed: serde_json::Value =
-            serde_json::from_str(HOOKS_JSON).expect("valid JSON");
+        let parsed: serde_json::Value = serde_json::from_str(HOOKS_JSON).expect("valid JSON");
         let obj = parsed.as_object().expect("hooks.json must be an object");
         let expected = [
             "SubagentStart",
