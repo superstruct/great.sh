@@ -33,120 +33,17 @@ pub enum LoopCommand {
     Uninstall,
 }
 
-/// An agent persona markdown file embedded at compile time.
-struct AgentFile {
-    name: &'static str,
-    content: &'static str,
-}
-
-/// A skill markdown file embedded at compile time (plugin format).
-struct SkillFile {
-    name: &'static str,
-    content: &'static str,
-}
-
-/// All 15 agent persona files shipped with the great.sh Loop.
-const AGENTS: &[AgentFile] = &[
-    AgentFile {
-        name: "nightingale",
-        content: include_str!("../../loop/agents/nightingale.md"),
-    },
-    AgentFile {
-        name: "lovelace",
-        content: include_str!("../../loop/agents/lovelace.md"),
-    },
-    AgentFile {
-        name: "socrates",
-        content: include_str!("../../loop/agents/socrates.md"),
-    },
-    AgentFile {
-        name: "humboldt",
-        content: include_str!("../../loop/agents/humboldt.md"),
-    },
-    AgentFile {
-        name: "davinci",
-        content: include_str!("../../loop/agents/davinci.md"),
-    },
-    AgentFile {
-        name: "vonbraun",
-        content: include_str!("../../loop/agents/vonbraun.md"),
-    },
-    AgentFile {
-        name: "turing",
-        content: include_str!("../../loop/agents/turing.md"),
-    },
-    AgentFile {
-        name: "kerckhoffs",
-        content: include_str!("../../loop/agents/kerckhoffs.md"),
-    },
-    AgentFile {
-        name: "rams",
-        content: include_str!("../../loop/agents/rams.md"),
-    },
-    AgentFile {
-        name: "nielsen",
-        content: include_str!("../../loop/agents/nielsen.md"),
-    },
-    AgentFile {
-        name: "knuth",
-        content: include_str!("../../loop/agents/knuth.md"),
-    },
-    AgentFile {
-        name: "gutenberg",
-        content: include_str!("../../loop/agents/gutenberg.md"),
-    },
-    AgentFile {
-        name: "hopper",
-        content: include_str!("../../loop/agents/hopper.md"),
-    },
-    AgentFile {
-        name: "dijkstra",
-        content: include_str!("../../loop/agents/dijkstra.md"),
-    },
-    AgentFile {
-        name: "wirth",
-        content: include_str!("../../loop/agents/wirth.md"),
-    },
-];
-
-/// All 5 skill files shipped with the great.sh Loop plugin.
-const SKILLS: &[SkillFile] = &[
-    SkillFile {
-        name: "loop",
-        content: include_str!("../../loop/skills/loop/SKILL.md"),
-    },
-    SkillFile {
-        name: "bugfix",
-        content: include_str!("../../loop/skills/bugfix/SKILL.md"),
-    },
-    SkillFile {
-        name: "deploy",
-        content: include_str!("../../loop/skills/deploy/SKILL.md"),
-    },
-    SkillFile {
-        name: "discover",
-        content: include_str!("../../loop/skills/discover/SKILL.md"),
-    },
-    SkillFile {
-        name: "backlog",
-        content: include_str!("../../loop/skills/backlog/SKILL.md"),
-    },
-];
-
 /// Teams configuration JSON embedded at compile time.
 const TEAMS_CONFIG: &str = include_str!("../../loop/teams-config.json");
 
-/// Observer report template embedded at compile time.
+/// Observer report template embedded at compile time (used for --project).
 const OBSERVER_TEMPLATE: &str = include_str!("../../loop/observer-template.md");
 
-/// Plugin manifest embedded at compile time.
-const PLUGIN_MANIFEST: &str = include_str!("../../loop/.claude-plugin/plugin.json");
+/// Marketplace repo identifier for `claude plugin marketplace add`.
+const MARKETPLACE_REPO: &str = "superstruct/great.sh";
 
-/// Hook configuration JSON embedded at compile time (plugin format).
-const HOOKS_JSON: &str = include_str!("../../loop/hooks/hooks.json");
-
-/// Hook handler script embedded at compile time.
-const HOOK_UPDATE_STATE: &str = include_str!("../../loop/scripts/update-state.sh");
+/// Plugin name as registered in Claude Code's plugin system.
+const PLUGIN_NAME: &str = "great";
 
 /// The exact CLAUDE.md content that was installed by the legacy great.sh Loop installer.
 /// Used for migration: if `~/.claude/CLAUDE.md` matches this exactly, it can be deleted.
@@ -412,69 +309,6 @@ fn migrate_claude_md(claude_dir: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-/// Returns the subset of managed plugin file paths that already exist on disk.
-fn collect_existing_paths(claude_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let plugin_dir = claude_dir.join("plugins").join("great");
-    let teams_dir = claude_dir.join("teams").join("loop");
-
-    let mut existing = Vec::new();
-
-    // Check plugin manifest
-    let manifest = plugin_dir.join(".claude-plugin").join("plugin.json");
-    if manifest.exists() {
-        existing.push(manifest);
-    }
-
-    // Check agent files in plugin dir
-    let agents_dir = plugin_dir.join("agents");
-    for agent in AGENTS {
-        let path = agents_dir.join(format!("{}.md", agent.name));
-        if path.exists() {
-            existing.push(path);
-        }
-    }
-
-    // Check skill files in plugin dir
-    for skill in SKILLS {
-        let path = plugin_dir.join("skills").join(skill.name).join("SKILL.md");
-        if path.exists() {
-            existing.push(path);
-        }
-    }
-
-    // Check hooks.json
-    let hooks_json = plugin_dir.join("hooks").join("hooks.json");
-    if hooks_json.exists() {
-        existing.push(hooks_json);
-    }
-
-    // Check hook script
-    let hook_script = plugin_dir.join("scripts").join("update-state.sh");
-    if hook_script.exists() {
-        existing.push(hook_script);
-    }
-
-    // Check teams config
-    let config_path = teams_dir.join("config.json");
-    if config_path.exists() {
-        existing.push(config_path);
-    }
-
-    // Check observer template
-    let observer = plugin_dir.join("observer-template.md");
-    if observer.exists() {
-        existing.push(observer);
-    }
-
-    // Check teams-config.json in plugin dir
-    let teams_cfg = plugin_dir.join("teams-config.json");
-    if teams_cfg.exists() {
-        existing.push(teams_cfg);
-    }
-
-    existing
-}
-
 /// Returns whether any legacy (pre-plugin) files exist.
 fn has_legacy_install(claude_dir: &std::path::Path) -> bool {
     claude_dir.join("agents").join("nightingale.md").exists()
@@ -486,47 +320,64 @@ fn has_legacy_install(claude_dir: &std::path::Path) -> bool {
             .exists()
 }
 
-/// Prompts the user to confirm overwriting existing files, or aborts in non-TTY contexts.
-///
-/// Returns `Ok(true)` if the user confirms, `Ok(false)` if they decline or stdin is not a TTY.
-fn confirm_overwrite(existing: &[std::path::PathBuf], non_interactive: bool) -> Result<bool> {
-    use std::io::IsTerminal;
+/// Run a `claude` CLI command, returning its stdout on success.
+fn run_claude_cmd(args: &[&str]) -> Result<String> {
+    let output = std::process::Command::new("claude")
+        .args(args)
+        .output()
+        .context("failed to run `claude` CLI — is Claude Code installed? https://docs.anthropic.com/en/docs/claude-code")?;
 
-    eprintln!();
-    output::warning("The following files already exist and will be overwritten:");
-    for path in existing {
-        let display = if let Some(home) = dirs::home_dir() {
-            if let Ok(relative) = path.strip_prefix(&home) {
-                format!("~/{}", relative.display())
-            } else {
-                path.display().to_string()
-            }
-        } else {
-            path.display().to_string()
-        };
-        eprintln!("  {}", display);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        bail!(
+            "`claude {}` failed (exit {}): {}",
+            args.join(" "),
+            output.status,
+            if stderr.is_empty() { &stdout } else { &stderr }
+        );
     }
 
-    if non_interactive || !std::io::stdin().is_terminal() {
-        eprintln!();
-        output::error("stdin is not a terminal -- cannot prompt for confirmation.");
-        output::info("Re-run with --force to overwrite: great loop install --force");
-        return Ok(false);
-    }
-
-    eprint!("Overwrite? [y/N] ");
-
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .context("failed to read from stdin")?;
-
-    let answer = input.trim().to_lowercase();
-    Ok(answer == "y" || answer == "yes")
+    Ok(stdout)
 }
 
-/// Install the great.sh Loop as a Claude Code plugin to `~/.claude/plugins/great/`.
-fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> {
+/// Check whether the great-sh marketplace is already registered.
+fn is_marketplace_registered() -> bool {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return false,
+    };
+    let known = home.join(".claude").join("known_marketplaces.json");
+    if !known.exists() {
+        return false;
+    }
+    let contents = match std::fs::read_to_string(&known) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    contents.contains(MARKETPLACE_REPO)
+}
+
+/// Check whether the great plugin is already installed via Claude Code.
+fn is_plugin_installed() -> bool {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return false,
+    };
+    let installed = home.join(".claude").join("installed_plugins.json");
+    if !installed.exists() {
+        return false;
+    }
+    let contents = match std::fs::read_to_string(&installed) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    contents.contains(PLUGIN_NAME)
+}
+
+/// Install the great.sh Loop via `claude plugin` CLI commands.
+fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()> {
     let home = dirs::home_dir().context("could not determine home directory — is $HOME set?")?;
     let claude_dir = home.join(".claude");
 
@@ -540,100 +391,40 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
         println!();
     }
 
-    // --- Phase 2: Install plugin files ---
-    let plugin_dir = claude_dir.join("plugins").join("great");
+    // --- Phase 2: Install plugin via claude CLI ---
 
-    // Create plugin directory structure
-    let plugin_agents_dir = plugin_dir.join("agents");
-    let plugin_hooks_dir = plugin_dir.join("hooks");
-    let plugin_scripts_dir = plugin_dir.join("scripts");
-    let plugin_manifest_dir = plugin_dir.join(".claude-plugin");
-
-    std::fs::create_dir_all(&plugin_agents_dir)
-        .context("failed to create plugin agents directory")?;
-    std::fs::create_dir_all(&plugin_hooks_dir)
-        .context("failed to create plugin hooks directory")?;
-    std::fs::create_dir_all(&plugin_scripts_dir)
-        .context("failed to create plugin scripts directory")?;
-    std::fs::create_dir_all(&plugin_manifest_dir)
-        .context("failed to create plugin .claude-plugin directory")?;
-
-    // Create skill directories
-    for skill in SKILLS {
-        let skill_dir = plugin_dir.join("skills").join(skill.name);
-        std::fs::create_dir_all(&skill_dir)
-            .with_context(|| format!("failed to create skill directory: {}", skill.name))?;
-    }
-
-    // Check for existing files before writing
-    let existing = collect_existing_paths(&claude_dir);
-    if !existing.is_empty() && !force {
-        let confirmed = confirm_overwrite(&existing, non_interactive)?;
-        if !confirmed {
-            bail!("aborted: no files were modified");
-        }
-    }
-
-    if force && !existing.is_empty() {
-        output::info("(--force: overwriting existing files)");
-    }
-
-    // Write plugin manifest
-    let manifest_path = plugin_manifest_dir.join("plugin.json");
-    std::fs::write(&manifest_path, PLUGIN_MANIFEST).context("failed to write plugin.json")?;
-    output::success("Plugin manifest -> ~/.claude/plugins/great/.claude-plugin/plugin.json");
-
-    // Write agent files
-    for agent in AGENTS {
-        let path = plugin_agents_dir.join(format!("{}.md", agent.name));
-        std::fs::write(&path, agent.content)
-            .with_context(|| format!("failed to write agent file: {}", path.display()))?;
-    }
-    output::success(&format!(
-        "{} agent personas -> ~/.claude/plugins/great/agents/",
-        AGENTS.len()
-    ));
-
-    // Write skill files
-    for skill in SKILLS {
-        let path = plugin_dir.join("skills").join(skill.name).join("SKILL.md");
-        std::fs::write(&path, skill.content)
-            .with_context(|| format!("failed to write skill file: {}", path.display()))?;
-    }
-    output::success(&format!(
-        "{} skills -> ~/.claude/plugins/great/skills/",
-        SKILLS.len()
-    ));
-
-    // Write hooks.json
-    let hooks_json_path = plugin_hooks_dir.join("hooks.json");
-    std::fs::write(&hooks_json_path, HOOKS_JSON).context("failed to write hooks.json")?;
-    output::success("Hooks config -> ~/.claude/plugins/great/hooks/hooks.json");
-
-    // Write hook handler script
-    let hook_script_path = plugin_scripts_dir.join("update-state.sh");
-    std::fs::write(&hook_script_path, HOOK_UPDATE_STATE).context("failed to write hook script")?;
-
-    // Make executable (Unix only)
-    #[cfg(unix)]
+    // Check that `claude` is on PATH
+    if std::process::Command::new("claude")
+        .arg("--version")
+        .output()
+        .is_err()
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&hook_script_path)
-            .context("failed to read hook script metadata")?
-            .permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&hook_script_path, perms)
-            .context("failed to set hook script permissions")?;
+        bail!("claude CLI not found — install Claude Code first: https://docs.anthropic.com/en/docs/claude-code");
     }
-    output::success("Hook handler -> ~/.claude/plugins/great/scripts/update-state.sh");
 
-    // Write observer template and teams-config.json into plugin dir
-    let observer_path = plugin_dir.join("observer-template.md");
-    std::fs::write(&observer_path, OBSERVER_TEMPLATE)
-        .context("failed to write observer-template.md")?;
+    // 2a: Register marketplace (idempotent)
+    if !is_marketplace_registered() {
+        output::info(&format!("Registering marketplace {}...", MARKETPLACE_REPO));
+        run_claude_cmd(&["plugin", "marketplace", "add", MARKETPLACE_REPO])?;
+        output::success("Marketplace registered");
+    } else {
+        output::success("Marketplace already registered");
+    }
 
-    let teams_cfg_path = plugin_dir.join("teams-config.json");
-    std::fs::write(&teams_cfg_path, TEAMS_CONFIG).context("failed to write teams-config.json")?;
+    // 2b: Install (or reinstall) the plugin
+    if is_plugin_installed() && force {
+        output::info("(--force: reinstalling plugin)");
+        // Uninstall first so reinstall picks up new files
+        let _ = run_claude_cmd(&["plugin", "uninstall", PLUGIN_NAME]);
+    }
+
+    if !is_plugin_installed() || force {
+        output::info("Installing plugin via claude CLI...");
+        run_claude_cmd(&["plugin", "install", PLUGIN_NAME])?;
+        output::success("Plugin installed via claude plugin install");
+    } else {
+        output::success("Plugin already installed (use --force to reinstall)");
+    }
 
     // --- Phase 3: Side-effects outside plugin ---
 
@@ -712,8 +503,6 @@ fn run_install(project: bool, force: bool, non_interactive: bool) -> Result<()> 
                             output::success(
                                 "Settings updated (env, statusLine, hooks removed) in ~/.claude/settings.json",
                             );
-                            // Skip the normal write path since we already handled it
-                            // (we need to jump past the next block)
                         } else {
                             // Hooks weren't modified, handle statusLine normally
                             let needs_statusline = if !obj.contains_key("statusLine") {
@@ -997,13 +786,34 @@ fn run_uninstall() -> Result<()> {
 
     let mut removed = 0;
 
-    // Remove plugin directory
-    let plugin_dir = claude_dir.join("plugins").join("great");
-    if plugin_dir.exists() {
-        std::fs::remove_dir_all(&plugin_dir)
-            .context("failed to remove ~/.claude/plugins/great/")?;
-        output::success("Removed plugin directory ~/.claude/plugins/great/");
-        removed += 1;
+    // Uninstall via claude CLI if available and plugin is installed
+    if is_plugin_installed() {
+        match run_claude_cmd(&["plugin", "uninstall", PLUGIN_NAME]) {
+            Ok(_) => {
+                output::success("Plugin uninstalled via claude plugin uninstall");
+                removed += 1;
+            }
+            Err(e) => {
+                output::warning(&format!("claude plugin uninstall failed: {}", e));
+                // Fall back to manual removal
+                let plugin_dir = claude_dir.join("plugins").join("great");
+                if plugin_dir.exists() {
+                    std::fs::remove_dir_all(&plugin_dir)
+                        .context("failed to remove ~/.claude/plugins/great/")?;
+                    output::success("Removed plugin directory ~/.claude/plugins/great/");
+                    removed += 1;
+                }
+            }
+        }
+    } else {
+        // Plugin not registered — clean up files manually if they exist
+        let plugin_dir = claude_dir.join("plugins").join("great");
+        if plugin_dir.exists() {
+            std::fs::remove_dir_all(&plugin_dir)
+                .context("failed to remove ~/.claude/plugins/great/")?;
+            output::success("Removed plugin directory ~/.claude/plugins/great/");
+            removed += 1;
+        }
     }
 
     // Remove teams/loop directory
@@ -1125,32 +935,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_agents_count() {
-        assert_eq!(AGENTS.len(), 15);
-    }
-
-    #[test]
-    fn test_skills_count() {
-        assert_eq!(SKILLS.len(), 5);
-    }
-
-    #[test]
-    fn test_agent_names_unique() {
-        let mut names: Vec<&str> = AGENTS.iter().map(|a| a.name).collect();
-        names.sort();
-        names.dedup();
-        assert_eq!(names.len(), AGENTS.len());
-    }
-
-    #[test]
-    fn test_skill_names_unique() {
-        let mut names: Vec<&str> = SKILLS.iter().map(|c| c.name).collect();
-        names.sort();
-        names.dedup();
-        assert_eq!(names.len(), SKILLS.len());
-    }
-
-    #[test]
     fn test_teams_config_valid_json() {
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(TEAMS_CONFIG);
         assert!(parsed.is_ok(), "teams-config.json must be valid JSON");
@@ -1160,28 +944,6 @@ mod tests {
     fn test_teams_config_has_loop_name() {
         let parsed: serde_json::Value = serde_json::from_str(TEAMS_CONFIG).expect("valid JSON");
         assert_eq!(parsed["name"].as_str(), Some("loop"));
-    }
-
-    #[test]
-    fn test_no_architecton_in_agents() {
-        for agent in AGENTS {
-            assert!(
-                !agent.content.contains("Architecton"),
-                "Agent '{}' must not contain 'Architecton' — use 'great.sh Loop'",
-                agent.name
-            );
-        }
-    }
-
-    #[test]
-    fn test_no_architecton_in_skills() {
-        for skill in SKILLS {
-            assert!(
-                !skill.content.contains("Architecton"),
-                "Skill '{}' must not contain 'Architecton' — use 'great.sh Loop'",
-                skill.name
-            );
-        }
     }
 
     #[test]
@@ -1196,17 +958,6 @@ mod tests {
     fn test_observer_template_not_empty() {
         assert!(!OBSERVER_TEMPLATE.is_empty());
         assert!(OBSERVER_TEMPLATE.contains("Observer Report"));
-    }
-
-    #[test]
-    fn test_all_expected_agents_present() {
-        for name in AGENT_NAMES {
-            assert!(
-                AGENTS.iter().any(|a| a.name == *name),
-                "Missing agent: {}",
-                name
-            );
-        }
     }
 
     #[test]
@@ -1315,103 +1066,6 @@ mod tests {
     }
 
     #[test]
-    fn test_collect_existing_paths_empty_dir() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let claude_dir = dir.path().join(".claude");
-        let existing = super::collect_existing_paths(&claude_dir);
-        assert!(
-            existing.is_empty(),
-            "fresh directory should have no existing managed files"
-        );
-    }
-
-    #[test]
-    fn test_collect_existing_paths_partial_install() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let claude_dir = dir.path().join(".claude");
-        let agents_dir = claude_dir.join("plugins").join("great").join("agents");
-        std::fs::create_dir_all(&agents_dir).unwrap();
-
-        std::fs::write(agents_dir.join("davinci.md"), "test").unwrap();
-
-        let existing = super::collect_existing_paths(&claude_dir);
-        assert_eq!(existing.len(), 1);
-        assert!(existing[0].ends_with("davinci.md"));
-    }
-
-    #[test]
-    fn test_collect_existing_paths_full_install() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let claude_dir = dir.path().join(".claude");
-        let plugin_dir = claude_dir.join("plugins").join("great");
-        let agents_dir = plugin_dir.join("agents");
-        let teams_dir = claude_dir.join("teams").join("loop");
-        std::fs::create_dir_all(&agents_dir).unwrap();
-        std::fs::create_dir_all(&teams_dir).unwrap();
-
-        // Plugin manifest
-        let manifest_dir = plugin_dir.join(".claude-plugin");
-        std::fs::create_dir_all(&manifest_dir).unwrap();
-        std::fs::write(manifest_dir.join("plugin.json"), "{}").unwrap();
-
-        // Agent files
-        for agent in super::AGENTS {
-            std::fs::write(agents_dir.join(format!("{}.md", agent.name)), "test").unwrap();
-        }
-
-        // Skill files
-        for skill in super::SKILLS {
-            let skill_dir = plugin_dir.join("skills").join(skill.name);
-            std::fs::create_dir_all(&skill_dir).unwrap();
-            std::fs::write(skill_dir.join("SKILL.md"), "test").unwrap();
-        }
-
-        // Hooks
-        let hooks_dir = plugin_dir.join("hooks");
-        std::fs::create_dir_all(&hooks_dir).unwrap();
-        std::fs::write(hooks_dir.join("hooks.json"), "{}").unwrap();
-
-        // Script
-        let scripts_dir = plugin_dir.join("scripts");
-        std::fs::create_dir_all(&scripts_dir).unwrap();
-        std::fs::write(scripts_dir.join("update-state.sh"), "test").unwrap();
-
-        // Teams config
-        std::fs::write(teams_dir.join("config.json"), "{}").unwrap();
-
-        // Observer template
-        std::fs::write(plugin_dir.join("observer-template.md"), "test").unwrap();
-
-        // Teams config in plugin dir
-        std::fs::write(plugin_dir.join("teams-config.json"), "test").unwrap();
-
-        let existing = super::collect_existing_paths(&claude_dir);
-        // 1 manifest + 15 agents + 5 skills + 1 hooks.json + 1 script + 1 teams config + 1 observer + 1 teams-config.json = 26
-        assert_eq!(
-            existing.len(),
-            26,
-            "full install should detect all 26 managed files, got {}",
-            existing.len()
-        );
-    }
-
-    #[test]
-    fn test_collect_existing_paths_ignores_unknown_files() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let claude_dir = dir.path().join(".claude");
-        let agents_dir = claude_dir.join("plugins").join("great").join("agents");
-        std::fs::create_dir_all(&agents_dir).unwrap();
-
-        std::fs::write(agents_dir.join("custom-agent.md"), "user content").unwrap();
-
-        let existing = super::collect_existing_paths(&claude_dir);
-        assert!(
-            existing.is_empty(),
-            "non-managed files should not be detected"
-        );
-    }
-
-    #[test]
     fn test_install_variant_has_force_flag() {
         use clap::Parser;
 
@@ -1439,24 +1093,12 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_plugin_manifest_valid_json() {
-        let parsed: Result<serde_json::Value, _> = serde_json::from_str(PLUGIN_MANIFEST);
-        assert!(parsed.is_ok(), "plugin.json must be valid JSON");
-        let val = parsed.unwrap();
-        assert_eq!(val["name"].as_str(), Some("great"));
-        assert_eq!(val["version"].as_str(), Some("0.1.0"));
-    }
-
-    #[test]
-    fn test_hooks_json_valid() {
-        let parsed: Result<serde_json::Value, _> = serde_json::from_str(HOOKS_JSON);
-        assert!(parsed.is_ok(), "hooks.json must be valid JSON");
-    }
-
+    /// Validate hooks.json on disk (read from repo, not embedded).
     #[test]
     fn test_hooks_json_has_all_events() {
-        let parsed: serde_json::Value = serde_json::from_str(HOOKS_JSON).expect("valid JSON");
+        let hooks_json = include_str!("../../loop/hooks/hooks.json");
+        let parsed: serde_json::Value =
+            serde_json::from_str(hooks_json).expect("hooks.json must be valid JSON");
         let obj = parsed.as_object().expect("hooks.json must be an object");
         let expected = [
             "SubagentStart",
@@ -1470,7 +1112,6 @@ mod tests {
             assert!(obj.contains_key(*event), "missing event: {}", event);
             let arr = obj[*event].as_array().expect("event value must be array");
             assert!(!arr.is_empty(), "event {} must have entries", event);
-            // Verify async flag
             for matcher in arr {
                 for hook in matcher["hooks"].as_array().unwrap() {
                     assert_eq!(
@@ -1480,6 +1121,53 @@ mod tests {
                         event
                     );
                 }
+            }
+        }
+    }
+
+    /// Validate plugin.json on disk (read from repo, not embedded).
+    #[test]
+    fn test_plugin_manifest_valid_json() {
+        let plugin_json = include_str!("../../loop/.claude-plugin/plugin.json");
+        let parsed: serde_json::Value =
+            serde_json::from_str(plugin_json).expect("plugin.json must be valid JSON");
+        assert_eq!(parsed["name"].as_str(), Some("great"));
+        assert_eq!(parsed["version"].as_str(), Some("0.1.0"));
+    }
+
+    /// Validate that no agent markdown files contain "Architecton".
+    #[test]
+    fn test_no_architecton_in_agent_files() {
+        for name in AGENT_NAMES {
+            let full_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("loop/agents")
+                .join(format!("{}.md", name));
+            if full_path.exists() {
+                let content = std::fs::read_to_string(&full_path).unwrap();
+                assert!(
+                    !content.contains("Architecton"),
+                    "Agent '{}' must not contain 'Architecton' — use 'great.sh Loop'",
+                    name
+                );
+            }
+        }
+    }
+
+    /// Validate that no skill markdown files contain "Architecton".
+    #[test]
+    fn test_no_architecton_in_skill_files() {
+        for name in SKILL_NAMES {
+            let full_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("loop/skills")
+                .join(name)
+                .join("SKILL.md");
+            if full_path.exists() {
+                let content = std::fs::read_to_string(&full_path).unwrap();
+                assert!(
+                    !content.contains("Architecton"),
+                    "Skill '{}' must not contain 'Architecton' — use 'great.sh Loop'",
+                    name
+                );
             }
         }
     }
@@ -1504,7 +1192,6 @@ mod tests {
 
     #[test]
     fn test_settings_no_hooks_after_install() {
-        // New installs should NOT have hooks in settings.json
         let default_settings = serde_json::json!({
             "env": {
                 "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
@@ -1519,7 +1206,6 @@ mod tests {
 
     #[test]
     fn test_settings_merge_preserves_user_keys() {
-        // Verify that non-great.sh keys survive the merge
         let settings = serde_json::json!({
             "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" },
             "statusLine": super::statusline_value(),
@@ -1556,5 +1242,11 @@ mod tests {
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(commands_dir.join("loop.md"), "test").unwrap();
         assert!(super::has_legacy_install(&claude_dir));
+    }
+
+    #[test]
+    fn test_marketplace_constants() {
+        assert_eq!(MARKETPLACE_REPO, "superstruct/great.sh");
+        assert_eq!(PLUGIN_NAME, "great");
     }
 }

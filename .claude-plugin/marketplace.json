@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "great-sh",
+  "description": "great.sh — Managed AI dev environment plugins",
+  "owner": { "name": "Superstruct" },
+  "plugins": [
+    {
+      "name": "great",
+      "description": "great.sh Loop — 16-role AI agent orchestration",
+      "source": "./loop",
+      "category": "development",
+      "homepage": "https://github.com/superstruct/great.sh"
+    }
+  ]
+}
