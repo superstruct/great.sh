@@ -227,8 +227,12 @@ impl TaskRegistry {
 
             let mut tasks = tasks_ref.lock().await;
             if let Some(handle) = tasks.get_mut(&tid) {
-                handle.state = new_state;
-                handle.completed_at = Some(Instant::now());
+                // A kill may have landed while we were collecting output;
+                // Killed is terminal — don't overwrite it with Completed.
+                if !matches!(handle.state, TaskState::Killed) {
+                    handle.state = new_state;
+                    handle.completed_at = Some(Instant::now());
+                }
             }
         });
 
@@ -276,9 +280,12 @@ impl TaskRegistry {
     pub async fn list_tasks(&self) -> Vec<TaskSnapshot> {
         let mut tasks = self.tasks.lock().await;
 
-        // Cleanup terminal-state tasks older than the configured TTL
-        let cutoff = Instant::now() - self.cleanup_ttl;
-        tasks.retain(|_, h| h.completed_at.is_none_or(|t| t > cutoff));
+        // Cleanup terminal-state tasks older than the configured TTL.
+        // checked_sub: Instant - Duration panics if it predates the monotonic
+        // epoch (e.g. within 30min of boot on Linux); skip cleanup instead.
+        if let Some(cutoff) = Instant::now().checked_sub(self.cleanup_ttl) {
+            tasks.retain(|_, h| h.completed_at.is_none_or(|t| t > cutoff));
+        }
 
         tasks.values().map(|h| self.snapshot(h)).collect()
     }
@@ -291,7 +298,8 @@ impl TaskRegistry {
     pub async fn cleanup(&self, force: bool) -> usize {
         let mut tasks = self.tasks.lock().await;
         let before = tasks.len();
-        let cutoff = Instant::now() - self.cleanup_ttl;
+        // checked_sub: see list_tasks — avoids a panic near the monotonic epoch.
+        let cutoff = Instant::now().checked_sub(self.cleanup_ttl);
         tasks.retain(|_, h| {
             if h.completed_at.is_none() {
                 return true; // keep running tasks
@@ -299,8 +307,11 @@ impl TaskRegistry {
             if force {
                 return false; // remove all terminal
             }
-            // keep if not yet past TTL
-            h.completed_at.is_some_and(|t| t > cutoff)
+            // keep if not yet past TTL (or if the TTL window predates the clock epoch)
+            match cutoff {
+                Some(cutoff) => h.completed_at.is_some_and(|t| t > cutoff),
+                None => true,
+            }
         });
         before - tasks.len()
     }

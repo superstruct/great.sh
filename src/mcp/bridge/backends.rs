@@ -359,11 +359,8 @@ mod tests {
         assert!(spec
             .args
             .last()
-            .map_or(false, |a| a.contains("SYSTEM: You are helpful")));
-        assert!(spec
-            .args
-            .last()
-            .map_or(false, |a| a.contains("TASK: hello")));
+            .is_some_and(|a| a.contains("SYSTEM: You are helpful")));
+        assert!(spec.args.last().is_some_and(|a| a.contains("TASK: hello")));
     }
 
     #[test]
