@@ -45,6 +45,12 @@ const MARKETPLACE_REPO: &str = "superstruct/great.sh";
 /// Plugin name as registered in Claude Code's plugin system.
 const PLUGIN_NAME: &str = "great";
 
+/// Marketplace name as declared in `.claude-plugin/marketplace.json`.
+const MARKETPLACE_NAME: &str = "great-sh";
+
+/// Fully-qualified `plugin@marketplace` spec for `claude plugin install`.
+const PLUGIN_SPEC: &str = "great@great-sh";
+
 /// The exact CLAUDE.md content that was installed by the legacy great.sh Loop installer.
 /// Used for migration: if `~/.claude/CLAUDE.md` matches this exactly, it can be deleted.
 const LEGACY_CLAUDE_MD: &str = "\
@@ -156,11 +162,15 @@ fn migrate_legacy_install(claude_dir: &std::path::Path) -> Result<MigrationResul
     let commands_dir = claude_dir.join("commands");
     let teams_dir = claude_dir.join("teams").join("loop");
     let hooks_dir = claude_dir.join("hooks").join("great-loop");
+    // Pre-CLI plugin dir: an older installer copied loop/ wholesale here.
+    // Managed installs live under ~/.claude/plugins/cache/, so this is always stale.
+    let legacy_plugin_dir = claude_dir.join("plugins").join(PLUGIN_NAME);
 
     // Quick check: is there anything to migrate?
     let has_legacy = agents_dir.join("nightingale.md").exists()
         || commands_dir.join("loop.md").exists()
-        || hooks_dir.exists();
+        || hooks_dir.exists()
+        || legacy_plugin_dir.join("teams-config.json").exists();
 
     if !has_legacy {
         return Ok(MigrationResult {
@@ -208,6 +218,14 @@ fn migrate_legacy_install(claude_dir: &std::path::Path) -> Result<MigrationResul
         removed += 1;
     }
 
+    // Remove pre-CLI plugin directory (identified by its teams-config.json,
+    // so a user's unrelated ~/.claude/plugins/great/ is never touched)
+    if legacy_plugin_dir.join("teams-config.json").exists() {
+        std::fs::remove_dir_all(&legacy_plugin_dir)
+            .context("failed to remove legacy ~/.claude/plugins/great/")?;
+        removed += 1;
+    }
+
     // Remove great-loop hook entries from settings.json
     let settings_path = claude_dir.join("settings.json");
     if settings_path.exists() {
@@ -222,7 +240,90 @@ fn migrate_legacy_install(claude_dir: &std::path::Path) -> Result<MigrationResul
     })
 }
 
-/// Remove great-loop hook entries from settings.json (used during migration and install).
+/// Remove great-loop hook entries from a parsed settings object (in memory).
+/// Returns whether anything was removed.
+fn remove_hooks_from_value(obj: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let mut modified = false;
+
+    if let Some(hooks) = obj.get_mut("hooks").and_then(|h| h.as_object_mut()) {
+        let hooks_before = serde_json::to_string(hooks).unwrap_or_default();
+
+        for (_event, matchers) in hooks.iter_mut() {
+            if let Some(arr) = matchers.as_array_mut() {
+                arr.retain(|entry| !is_great_loop_hook(entry));
+            }
+        }
+
+        // Remove empty event arrays
+        let empty_events: Vec<String> = hooks
+            .iter()
+            .filter(|(_, v)| v.as_array().map(|a| a.is_empty()).unwrap_or(false))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in empty_events {
+            hooks.remove(&key);
+        }
+
+        let hooks_after = serde_json::to_string(hooks).unwrap_or_default();
+        if hooks_before != hooks_after {
+            modified = true;
+        }
+    }
+
+    // If hooks object is now empty, remove the key
+    if obj
+        .get("hooks")
+        .and_then(|h| h.as_object())
+        .map(|h| h.is_empty())
+        .unwrap_or(false)
+    {
+        obj.remove("hooks");
+        modified = true;
+    }
+
+    modified
+}
+
+/// Merge great.sh Loop settings into a parsed settings.json value, in memory:
+/// inject the Agent Teams env var, strip legacy great-loop hooks, and inject
+/// or repair the statusLine entry. Returns `(modified, hooks_removed)`.
+fn merge_loop_settings(val: &mut serde_json::Value) -> (bool, bool) {
+    let mut modified = false;
+    let mut hooks_removed = false;
+
+    if let Some(obj) = val.as_object_mut() {
+        // --- Inject env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS ---
+        let env_obj = obj.entry("env").or_insert_with(|| serde_json::json!({}));
+        if let Some(env_map) = env_obj.as_object_mut() {
+            if !env_map.contains_key("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") {
+                env_map.insert(
+                    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS".to_string(),
+                    serde_json::json!("1"),
+                );
+                modified = true;
+            }
+        }
+
+        // --- Remove any legacy great-loop hooks (now shipped in plugin) ---
+        hooks_removed = remove_hooks_from_value(obj);
+        modified |= hooks_removed;
+
+        // --- Inject or repair statusLine ---
+        let needs_statusline = match obj.get("statusLine") {
+            None => true,
+            Some(serde_json::Value::Object(sl)) => !sl.contains_key("type"),
+            Some(_) => false,
+        };
+        if needs_statusline {
+            obj.insert("statusLine".to_string(), statusline_value());
+            modified = true;
+        }
+    }
+
+    (modified, hooks_removed)
+}
+
+/// Remove great-loop hook entries from settings.json (used during migration and uninstall).
 fn remove_hooks_from_settings(settings_path: &std::path::Path) -> Result<bool> {
     if !settings_path.exists() {
         return Ok(false);
@@ -237,43 +338,7 @@ fn remove_hooks_from_settings(settings_path: &std::path::Path) -> Result<bool> {
 
     let mut modified = false;
     if let Some(obj) = val.as_object_mut() {
-        if let Some(hooks) = obj.get_mut("hooks").and_then(|h| h.as_object_mut()) {
-            let hooks_before = serde_json::to_string(hooks).unwrap_or_default();
-
-            for (_event, matchers) in hooks.iter_mut() {
-                if let Some(arr) = matchers.as_array_mut() {
-                    arr.retain(|entry| !is_great_loop_hook(entry));
-                }
-            }
-
-            // Remove empty event arrays
-            let empty_events: Vec<String> = hooks
-                .iter()
-                .filter(|(_, v)| v.as_array().map(|a| a.is_empty()).unwrap_or(false))
-                .map(|(k, _)| k.clone())
-                .collect();
-            for key in empty_events {
-                hooks.remove(&key);
-            }
-
-            // Remove hooks key entirely if empty
-            let hooks_after = serde_json::to_string(hooks).unwrap_or_default();
-            if hooks_before != hooks_after {
-                modified = true;
-            }
-        }
-
-        // If hooks object is now empty, remove the key
-        if obj
-            .get("hooks")
-            .and_then(|h| h.as_object())
-            .map(|h| h.is_empty())
-            .unwrap_or(false)
-        {
-            obj.remove("hooks");
-            modified = true;
-        }
-
+        modified = remove_hooks_from_value(obj);
         if modified {
             let formatted =
                 serde_json::to_string_pretty(&val).context("failed to serialize settings.json")?;
@@ -318,6 +383,11 @@ fn has_legacy_install(claude_dir: &std::path::Path) -> bool {
             .join("great-loop")
             .join("update-state.sh")
             .exists()
+        || claude_dir
+            .join("plugins")
+            .join(PLUGIN_NAME)
+            .join("teams-config.json")
+            .exists()
 }
 
 /// Run a `claude` CLI command, returning its stdout on success.
@@ -342,38 +412,67 @@ fn run_claude_cmd(args: &[&str]) -> Result<String> {
     Ok(stdout)
 }
 
+/// Claude Code's plugin state directory (`~/.claude/plugins/`).
+fn plugins_state_dir() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude").join("plugins"))
+}
+
 /// Check whether the great-sh marketplace is already registered.
+///
+/// Reads `~/.claude/plugins/known_marketplaces.json`, whose shape is
+/// `{"<name>": {"source": {"source": "github", "repo": "owner/repo"}, ...}}`.
 fn is_marketplace_registered() -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
+    let known = match plugins_state_dir() {
+        Some(d) => d.join("known_marketplaces.json"),
         None => return false,
     };
-    let known = home.join(".claude").join("known_marketplaces.json");
-    if !known.exists() {
-        return false;
-    }
     let contents = match std::fs::read_to_string(&known) {
         Ok(c) => c,
         Err(_) => return false,
     };
-    contents.contains(MARKETPLACE_REPO)
+    let val: serde_json::Value = match serde_json::from_str(&contents) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    val.as_object()
+        .map(|map| {
+            map.contains_key(MARKETPLACE_NAME)
+                || map.values().any(|m| {
+                    m.pointer("/source/repo").and_then(|r| r.as_str()) == Some(MARKETPLACE_REPO)
+                })
+        })
+        .unwrap_or(false)
+}
+
+/// Look up the plugin's install path from Claude Code's plugin registry.
+///
+/// Reads `~/.claude/plugins/installed_plugins.json` (v2 schema:
+/// `{"plugins": {"<plugin>@<marketplace>": [{"installPath": ...}, ...]}}`)
+/// and returns the most recent install path, or `None` if not installed.
+fn installed_plugin_path() -> Option<std::path::PathBuf> {
+    let installed = plugins_state_dir()?.join("installed_plugins.json");
+    let contents = std::fs::read_to_string(&installed).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&contents).ok()?;
+    let plugins = val.get("plugins")?.as_object()?;
+    let entries = plugins.get(PLUGIN_SPEC).or_else(|| {
+        // Fallback: the plugin may be registered under a differently-named
+        // marketplace (e.g. a locally-added marketplace).
+        plugins
+            .iter()
+            .find(|(key, _)| key.split('@').next() == Some(PLUGIN_NAME))
+            .map(|(_, v)| v)
+    })?;
+    entries
+        .as_array()?
+        .iter()
+        .filter_map(|e| e.get("installPath").and_then(|p| p.as_str()))
+        .next_back()
+        .map(std::path::PathBuf::from)
 }
 
 /// Check whether the great plugin is already installed via Claude Code.
 fn is_plugin_installed() -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return false,
-    };
-    let installed = home.join(".claude").join("installed_plugins.json");
-    if !installed.exists() {
-        return false;
-    }
-    let contents = match std::fs::read_to_string(&installed) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    contents.contains(PLUGIN_NAME)
+    installed_plugin_path().is_some()
 }
 
 /// Install the great.sh Loop via `claude plugin` CLI commands.
@@ -420,7 +519,7 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
 
     if !is_plugin_installed() || force {
         output::info("Installing plugin via claude CLI...");
-        run_claude_cmd(&["plugin", "install", PLUGIN_NAME])?;
+        run_claude_cmd(&["plugin", "install", PLUGIN_SPEC])?;
         output::success("Plugin installed via claude plugin install");
     } else {
         output::success("Plugin already installed (use --force to reinstall)");
@@ -453,114 +552,27 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
             .context("failed to read ~/.claude/settings.json")?;
         match serde_json::from_str::<serde_json::Value>(&contents) {
             Ok(mut val) => {
-                if let Some(obj) = val.as_object_mut() {
-                    let mut modified = false;
+                // Single pass: mutate in memory (env + hooks + statusLine),
+                // then write at most once. A multi-write flow here previously
+                // dropped the env injection when legacy hooks were removed.
+                let (modified, hooks_removed) = merge_loop_settings(&mut val);
 
-                    // --- Inject env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS ---
-                    let env_obj = obj.entry("env").or_insert_with(|| serde_json::json!({}));
-                    if let Some(env_map) = env_obj.as_object_mut() {
-                        if !env_map.contains_key("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") {
-                            env_map.insert(
-                                "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS".to_string(),
-                                serde_json::json!("1"),
-                            );
-                            modified = true;
-                        }
-                    }
-
-                    // --- Remove any legacy hooks from settings ---
-                    if obj.get("hooks").is_some() {
-                        if remove_hooks_from_settings(&settings_path)? {
-                            // Re-read after hooks removal
-                            let updated = std::fs::read_to_string(&settings_path)
-                                .context("failed to re-read settings.json")?;
-                            val = serde_json::from_str(&updated)
-                                .context("settings.json invalid after hooks removal")?;
-                            // Re-borrow obj after re-parsing
-                            if let Some(obj2) = val.as_object_mut() {
-                                // --- Inject or repair statusLine ---
-                                let needs_statusline = if !obj2.contains_key("statusLine") {
-                                    true
-                                } else if let Some(sl) =
-                                    obj2.get("statusLine").and_then(|v| v.as_object())
-                                {
-                                    !sl.contains_key("type")
-                                } else {
-                                    false
-                                };
-                                if needs_statusline {
-                                    obj2.insert("statusLine".to_string(), statusline_value());
-                                    modified = true;
-                                }
-
-                                if modified {
-                                    let formatted = serde_json::to_string_pretty(&val)
-                                        .context("failed to serialize settings.json")?;
-                                    std::fs::write(&settings_path, formatted)
-                                        .context("failed to write ~/.claude/settings.json")?;
-                                }
-                            }
-                            output::success(
-                                "Settings updated (env, statusLine, hooks removed) in ~/.claude/settings.json",
-                            );
-                        } else {
-                            // Hooks weren't modified, handle statusLine normally
-                            let needs_statusline = if !obj.contains_key("statusLine") {
-                                true
-                            } else if let Some(sl) =
-                                obj.get("statusLine").and_then(|v| v.as_object())
-                            {
-                                !sl.contains_key("type")
-                            } else {
-                                false
-                            };
-                            if needs_statusline {
-                                obj.insert("statusLine".to_string(), statusline_value());
-                                modified = true;
-                            }
-
-                            if modified {
-                                let formatted = serde_json::to_string_pretty(&val)
-                                    .context("failed to serialize settings.json")?;
-                                std::fs::write(&settings_path, formatted)
-                                    .context("failed to write ~/.claude/settings.json")?;
-                                output::success(
-                                    "Settings updated (env, statusLine) in ~/.claude/settings.json",
-                                );
-                            } else {
-                                output::success(
-                                    "Settings already configured in ~/.claude/settings.json",
-                                );
-                            }
-                        }
+                if modified {
+                    let formatted = serde_json::to_string_pretty(&val)
+                        .context("failed to serialize settings.json")?;
+                    std::fs::write(&settings_path, formatted)
+                        .context("failed to write ~/.claude/settings.json")?;
+                    if hooks_removed {
+                        output::success(
+                            "Settings updated (env, statusLine, legacy hooks removed) in ~/.claude/settings.json",
+                        );
                     } else {
-                        // No hooks key at all — just handle statusLine
-                        let needs_statusline = if !obj.contains_key("statusLine") {
-                            true
-                        } else if let Some(sl) = obj.get("statusLine").and_then(|v| v.as_object()) {
-                            !sl.contains_key("type")
-                        } else {
-                            false
-                        };
-                        if needs_statusline {
-                            obj.insert("statusLine".to_string(), statusline_value());
-                            modified = true;
-                        }
-
-                        if modified {
-                            let formatted = serde_json::to_string_pretty(&val)
-                                .context("failed to serialize settings.json")?;
-                            std::fs::write(&settings_path, formatted)
-                                .context("failed to write ~/.claude/settings.json")?;
-                            output::success(
-                                "Settings updated (env, statusLine) in ~/.claude/settings.json",
-                            );
-                        } else {
-                            output::success(
-                                "Settings already configured in ~/.claude/settings.json",
-                            );
-                        }
+                        output::success(
+                            "Settings updated (env, statusLine) in ~/.claude/settings.json",
+                        );
                     }
+                } else {
+                    output::success("Settings already configured in ~/.claude/settings.json");
                 }
             }
             Err(_) => {
@@ -581,8 +593,7 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
                     "Write",
                     "Edit",
                     "Glob",
-                    "Grep",
-                    "LS"
+                    "Grep"
                 ]
             },
             "statusLine": statusline_value()
@@ -656,57 +667,50 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
 fn run_status() -> Result<()> {
     let home = dirs::home_dir().context("could not determine home directory — is $HOME set?")?;
     let claude_dir = home.join(".claude");
-    let plugin_dir = claude_dir.join("plugins").join("great");
 
     output::header("great.sh Loop — Status");
     println!();
 
-    // Check plugin manifest
-    let plugin_ok = plugin_dir
-        .join(".claude-plugin")
-        .join("plugin.json")
-        .exists();
-    if plugin_ok {
-        output::success("Plugin manifest: installed");
-    } else {
-        output::error("Plugin manifest: not installed");
-    }
+    // Resolve the managed install path from Claude Code's plugin registry
+    let plugin_dir = installed_plugin_path();
+    let plugin_ok = plugin_dir.is_some();
+    let (agents_ok, skills_ok) = match &plugin_dir {
+        Some(dir) => {
+            output::success(&format!("Plugin installed: {}", dir.display()));
 
-    // Check key agent file in plugin dir
-    let agents_ok = plugin_dir.join("agents").join("nightingale.md").exists();
-    if agents_ok {
-        output::success("Agent personas: installed");
-    } else {
-        output::error("Agent personas: not installed");
-    }
+            let agents_ok = dir.join("agents").join("nightingale.md").exists();
+            if agents_ok {
+                output::success("Agent personas: installed");
+            } else {
+                output::error("Agent personas: missing from plugin");
+            }
 
-    // Check key skill file in plugin dir
-    let skills_ok = plugin_dir
-        .join("skills")
-        .join("loop")
-        .join("SKILL.md")
-        .exists();
-    if skills_ok {
-        output::success("Plugin skills: installed");
-    } else {
-        output::error("Plugin skills: not installed");
-    }
+            let skills_ok = dir.join("skills").join("loop").join("SKILL.md").exists();
+            if skills_ok {
+                output::success("Plugin skills: installed");
+            } else {
+                output::error("Plugin skills: missing from plugin");
+            }
 
-    // Check hooks.json in plugin dir
-    let hooks_ok = plugin_dir.join("hooks").join("hooks.json").exists();
-    if hooks_ok {
-        output::success("Hooks config: installed in plugin");
-    } else {
-        output::warning("Hooks config: not installed");
-    }
+            if dir.join("hooks").join("hooks.json").exists() {
+                output::success("Hooks config: installed in plugin");
+            } else {
+                output::warning("Hooks config: not installed");
+            }
 
-    // Check hook script in plugin dir
-    let script_ok = plugin_dir.join("scripts").join("update-state.sh").exists();
-    if script_ok {
-        output::success("Hook handler: installed");
-    } else {
-        output::warning("Hook handler: not installed (statusline will show 'idle')");
-    }
+            if dir.join("scripts").join("update-state.sh").exists() {
+                output::success("Hook handler: installed");
+            } else {
+                output::warning("Hook handler: not installed (statusline will show 'idle')");
+            }
+
+            (agents_ok, skills_ok)
+        }
+        None => {
+            output::error("Plugin: not installed (not found in Claude Code's plugin registry)");
+            (false, false)
+        }
+    };
 
     // Check teams config
     let teams_ok = claude_dir
@@ -990,8 +994,7 @@ mod tests {
                     "Write",
                     "Edit",
                     "Glob",
-                    "Grep",
-                    "LS"
+                    "Grep"
                 ]
             },
             "statusLine": super::statusline_value()
@@ -1131,8 +1134,21 @@ mod tests {
         let plugin_json = include_str!("../../loop/.claude-plugin/plugin.json");
         let parsed: serde_json::Value =
             serde_json::from_str(plugin_json).expect("plugin.json must be valid JSON");
-        assert_eq!(parsed["name"].as_str(), Some("great"));
-        assert_eq!(parsed["version"].as_str(), Some("0.1.0"));
+        assert_eq!(parsed["name"].as_str(), Some(PLUGIN_NAME));
+        let version = parsed["version"]
+            .as_str()
+            .expect("version must be a string");
+        let parts: Vec<&str> = version.split('.').collect();
+        assert_eq!(
+            parts.len(),
+            3,
+            "version must be semver (x.y.z): {}",
+            version
+        );
+        for part in parts {
+            part.parse::<u32>()
+                .unwrap_or_else(|_| panic!("non-numeric version component in {}", version));
+        }
     }
 
     /// Validate that no agent markdown files contain "Architecton".
@@ -1170,6 +1186,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Regression: env injection must survive legacy-hooks removal in the
+    /// same merge pass (previously a second read-from-disk discarded it).
+    #[test]
+    fn test_merge_keeps_env_when_removing_hooks() {
+        let mut settings = serde_json::json!({
+            "hooks": {
+                "SubagentStop": [{
+                    "matcher": "",
+                    "hooks": [{"type": "command", "command": "~/.claude/hooks/great-loop/update-state.sh"}]
+                }]
+            },
+            "customKey": "user value"
+        });
+
+        let (modified, hooks_removed) = super::merge_loop_settings(&mut settings);
+
+        assert!(modified);
+        assert!(hooks_removed);
+        assert_eq!(
+            settings["env"]["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"].as_str(),
+            Some("1"),
+            "env var must be present after hooks removal"
+        );
+        assert!(
+            settings.get("hooks").is_none(),
+            "legacy hooks must be removed"
+        );
+        assert_eq!(settings["statusLine"]["type"].as_str(), Some("command"));
+        assert_eq!(settings["customKey"].as_str(), Some("user value"));
+    }
+
+    #[test]
+    fn test_merge_noop_when_already_configured() {
+        let mut settings = serde_json::json!({
+            "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" },
+            "statusLine": { "type": "command", "command": "great statusline" }
+        });
+        let (modified, hooks_removed) = super::merge_loop_settings(&mut settings);
+        assert!(!modified, "fully-configured settings must not be rewritten");
+        assert!(!hooks_removed);
     }
 
     #[test]
