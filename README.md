@@ -53,7 +53,7 @@ claude mcp add --scope user great-bridge -- great mcp-bridge
 
 ## The great.sh Loop
 
-A 15-role AI agent orchestration methodology. Each role is embodied by a historical figure whose expertise maps to the task.
+A 16-role AI agent orchestration methodology (4 teammates + 11 subagents + 1 team lead), shipped as a Claude Code plugin. Each role is embodied by a historical figure whose expertise maps to the task.
 
 ```
 Nightingale → Lovelace → Socrates → Humboldt → Da Vinci →
@@ -63,7 +63,13 @@ Nightingale → Lovelace → Socrates → Humboldt → Da Vinci →
 Hopper → Deming
 ```
 
-Requirements → spec → review → scout → build → test/security/perf/UX → code review → visual → docs → commit → observe. One iteration at a time.
+Requirements → spec → review → scout → build → test/security/perf/UX → code review → visual → docs → commit → observe. One iteration at a time. Von Braun handles release builds separately via `/great:deploy`.
+
+```sh
+great loop install            # registers the plugin with Claude Code
+great loop install --project  # adds .tasks/ working state to the current repo
+claude                        # then: /great:backlog → /great:loop
+```
 
 ## Templates
 

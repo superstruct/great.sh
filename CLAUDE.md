@@ -30,7 +30,7 @@ Cargo.toml                # Rust CLI package
 src/                      # Rust source
 ├── main.rs               # Entry point, CLI dispatch
 ├── error.rs              # GreatError enum (thiserror)
-├── cli/                  # Subcommand modules (init, apply, status, sync, vault, mcp, doctor, update, diff, template)
+├── cli/                  # Subcommand modules (init, apply, status, sync, vault, mcp, mcp_bridge, doctor, update, diff, template, loop_cmd, statusline, bootstrap, sudo, tuning, output, util)
 ├── config/               # great.toml loading + schema
 ├── platform/             # OS/arch/WSL detection + PlatformCapabilities (package managers, WSL2)
 ├── mcp/                  # MCP server management
@@ -69,13 +69,16 @@ infra/cdk/                # AWS CDK stack
 
 ## great.sh Loop (`loop/`)
 
-The `loop/` directory contains the great.sh Loop — a 15-role AI agent orchestration methodology installed globally by the great.sh CLI. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
+The `loop/` directory contains the great.sh Loop — a 16-role AI agent orchestration methodology (4 teammates + 11 subagents + 1 team lead) shipped as a Claude Code plugin. `great loop install` registers the `great-sh` marketplace and runs `claude plugin install great@great-sh`. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
 
 ### Structure
 ```
 loop/
-├── agents/          # Agent persona definitions (15 agents)
-├── commands/        # Slash commands (/loop, /bugfix, /deploy, /discover)
+├── .claude-plugin/  # plugin.json manifest
+├── agents/          # Agent persona definitions (15 agents; Deming, the team lead, is the 16th role)
+├── skills/          # Slash-command skills (/great:loop, /great:backlog, /great:bugfix, /great:deploy, /great:discover)
+├── hooks/           # hooks.json — statusline state-tracking hooks
+├── scripts/         # update-state.sh hook handler
 ├── teams-config.json
 └── observer-template.md
 ```
