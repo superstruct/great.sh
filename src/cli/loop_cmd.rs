@@ -419,13 +419,19 @@ fn plugins_state_dir() -> Option<std::path::PathBuf> {
 
 /// Check whether the great-sh marketplace is already registered.
 ///
-/// Reads `~/.claude/plugins/known_marketplaces.json`, whose shape is
-/// `{"<name>": {"source": {"source": "github", "repo": "owner/repo"}, ...}}`.
+/// Reads `known_marketplaces.json` from `~/.claude/plugins/`.
 fn is_marketplace_registered() -> bool {
-    let known = match plugins_state_dir() {
-        Some(d) => d.join("known_marketplaces.json"),
-        None => return false,
-    };
+    match plugins_state_dir() {
+        Some(d) => is_marketplace_registered_in(&d),
+        None => false,
+    }
+}
+
+/// Path-injectable core of [`is_marketplace_registered`], for testing against
+/// a fixture directory. The registry shape is
+/// `{"<name>": {"source": {"source": "github", "repo": "owner/repo"}, ...}}`.
+fn is_marketplace_registered_in(plugins_dir: &std::path::Path) -> bool {
+    let known = plugins_dir.join("known_marketplaces.json");
     let contents = match std::fs::read_to_string(&known) {
         Ok(c) => c,
         Err(_) => return false,
@@ -444,13 +450,18 @@ fn is_marketplace_registered() -> bool {
         .unwrap_or(false)
 }
 
-/// Look up the plugin's install path from Claude Code's plugin registry.
-///
-/// Reads `~/.claude/plugins/installed_plugins.json` (v2 schema:
-/// `{"plugins": {"<plugin>@<marketplace>": [{"installPath": ...}, ...]}}`)
-/// and returns the most recent install path, or `None` if not installed.
+/// Look up the plugin's install path from Claude Code's plugin registry
+/// (`installed_plugins.json` under `~/.claude/plugins/`).
 fn installed_plugin_path() -> Option<std::path::PathBuf> {
-    let installed = plugins_state_dir()?.join("installed_plugins.json");
+    installed_plugin_path_in(&plugins_state_dir()?)
+}
+
+/// Path-injectable core of [`installed_plugin_path`], for testing against a
+/// fixture directory. The registry is the v2 schema:
+/// `{"plugins": {"<plugin>@<marketplace>": [{"installPath": ...}, ...]}}`.
+/// Returns the most recent install path, or `None` if not installed.
+fn installed_plugin_path_in(plugins_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let installed = plugins_dir.join("installed_plugins.json");
     let contents = std::fs::read_to_string(&installed).ok()?;
     let val: serde_json::Value = serde_json::from_str(&contents).ok()?;
     let plugins = val.get("plugins")?.as_object()?;
@@ -1186,6 +1197,88 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Regression: registry files live under ~/.claude/plugins/, in the v2
+    /// schema — exercise parsing against an on-disk fixture matching the
+    /// real layout (the original detection read the wrong paths entirely).
+    #[test]
+    fn test_installed_plugin_path_v2_registry() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("installed_plugins.json"),
+            r#"{
+              "version": 2,
+              "plugins": {
+                "other@somewhere": [
+                  {"scope": "user", "installPath": "/home/u/.claude/plugins/cache/somewhere/other/1.0.0", "version": "1.0.0"}
+                ],
+                "great@great-sh": [
+                  {"scope": "user", "installPath": "/home/u/.claude/plugins/cache/great-sh/great/0.1.0", "version": "0.1.0"},
+                  {"scope": "user", "installPath": "/home/u/.claude/plugins/cache/great-sh/great/0.2.0", "version": "0.2.0"}
+                ]
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let path = super::installed_plugin_path_in(dir.path()).expect("plugin should be found");
+        assert_eq!(
+            path.to_str().unwrap(),
+            "/home/u/.claude/plugins/cache/great-sh/great/0.2.0",
+            "must pick the most recent install entry"
+        );
+    }
+
+    #[test]
+    fn test_installed_plugin_path_absent_or_unrelated() {
+        let dir = tempfile::TempDir::new().unwrap();
+        // No registry file at all
+        assert!(super::installed_plugin_path_in(dir.path()).is_none());
+
+        // Registry exists but only contains a plugin whose name merely
+        // CONTAINS "great" — the old substring check false-positived here.
+        std::fs::write(
+            dir.path().join("installed_plugins.json"),
+            r#"{"version": 2, "plugins": {"greatest-hits@other": [
+                {"scope": "user", "installPath": "/x", "version": "1.0.0"}
+            ]}}"#,
+        )
+        .unwrap();
+        assert!(
+            super::installed_plugin_path_in(dir.path()).is_none(),
+            "unrelated plugin names must not match"
+        );
+    }
+
+    #[test]
+    fn test_marketplace_registered_by_name_or_repo() {
+        let dir = tempfile::TempDir::new().unwrap();
+        assert!(!super::is_marketplace_registered_in(dir.path()));
+
+        // Registered under the canonical name
+        std::fs::write(
+            dir.path().join("known_marketplaces.json"),
+            r#"{"great-sh": {"source": {"source": "github", "repo": "superstruct/great.sh"}}}"#,
+        )
+        .unwrap();
+        assert!(super::is_marketplace_registered_in(dir.path()));
+
+        // Registered under a different name but the right repo
+        std::fs::write(
+            dir.path().join("known_marketplaces.json"),
+            r#"{"my-fork": {"source": {"source": "github", "repo": "superstruct/great.sh"}}}"#,
+        )
+        .unwrap();
+        assert!(super::is_marketplace_registered_in(dir.path()));
+
+        // Unrelated marketplaces only
+        std::fs::write(
+            dir.path().join("known_marketplaces.json"),
+            r#"{"podero": {"source": {"source": "github", "repo": "team-podero/claude-plugin"}}}"#,
+        )
+        .unwrap();
+        assert!(!super::is_marketplace_registered_in(dir.path()));
     }
 
     /// Regression: env injection must survive legacy-hooks removal in the
