@@ -51,9 +51,16 @@ main() {
     trap 'rm -rf "$TMP"' EXIT
 
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$latest_url" -o "$TMP/great"
+        # -f: fail on HTTP errors — without it a 404 page would be installed as the binary
+        if ! curl -fsSL "$latest_url" -o "$TMP/great"; then
+            echo "Error: download failed (HTTP error) from ${latest_url}"
+            exit 1
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$TMP/great" "$latest_url"
+        if ! wget -qO "$TMP/great" "$latest_url"; then
+            echo "Error: download failed from ${latest_url}"
+            exit 1
+        fi
     else
         echo "Error: curl or wget required"
         exit 1
