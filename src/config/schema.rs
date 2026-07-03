@@ -81,7 +81,7 @@ pub struct ToolsConfig {
 pub struct AgentConfig {
     /// The provider for this agent (e.g., "anthropic", "openai").
     pub provider: Option<String>,
-    /// The model identifier (e.g., "claude-sonnet-4-20250514").
+    /// The model identifier (e.g., "claude-sonnet-5").
     pub model: Option<String>,
     /// API key or secret reference (e.g., "${ANTHROPIC_API_KEY}").
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -101,9 +101,9 @@ pub struct McpConfig {
     /// Environment variables for the server process.
     /// Values may contain `${SECRET_NAME}` references.
     pub env: Option<HashMap<String, String>>,
-    /// Transport type: `"stdio"` (default) or `"http"`.
+    /// Transport type: `"stdio"` (default), `"http"`, or `"sse"`.
     pub transport: Option<String>,
-    /// URL for HTTP transport.
+    /// URL for HTTP or SSE transport.
     pub url: Option<String>,
     /// Whether this MCP server is active. Defaults to true when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -242,11 +242,14 @@ impl GreatConfig {
                         )));
                     }
                 }
-                // Check: http transport requires a url
-                if mcp.transport.as_deref() == Some("http") && mcp.url.is_none() {
+                // Check: http and sse transports require a url
+                if matches!(mcp.transport.as_deref(), Some("http") | Some("sse"))
+                    && mcp.url.is_none()
+                {
                     messages.push(ConfigMessage::Error(format!(
-                        "mcp '{}': transport 'http' requires a 'url' field",
-                        name
+                        "mcp '{}': transport '{}' requires a 'url' field",
+                        name,
+                        mcp.transport.as_deref().unwrap_or_default()
                     )));
                 }
             }
@@ -380,7 +383,7 @@ ripgrep = "latest"
 
 [agents.claude]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-5"
 
 [mcp.filesystem]
 command = "npx"
@@ -460,7 +463,7 @@ name = "valid"
 
 [agents.claude]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-5"
 
 [secrets]
 provider = "env"
@@ -580,7 +583,7 @@ env = { Z = "${SHARED}" }
         let toml_str = r#"
 [agents.claude]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-5"
 api_key = "${ANTHROPIC_API_KEY}"
 "#;
         let config: GreatConfig = toml::from_str(toml_str).unwrap();
@@ -815,7 +818,7 @@ version = "1.0.0"
 
 [agents.claude]
 provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+model = "claude-sonnet-5"
 api_key = "${ANTHROPIC_API_KEY}"
 enabled = true
 

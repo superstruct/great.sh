@@ -159,7 +159,7 @@ pub fn run(args: Args) -> Result<()> {
         "claude".to_string(),
         AgentConfig {
             provider: Some("anthropic".to_string()),
-            model: Some("claude-sonnet-4-20250514".to_string()),
+            model: Some("claude-sonnet-5".to_string()),
             ..Default::default()
         },
     );
