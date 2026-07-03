@@ -663,7 +663,7 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
     output::header("great.sh Loop installed!");
     println!();
     output::info("16 roles: 4 teammates + 11 subagents + 1 team lead");
-    output::info("All Claude: Opus + Sonnet + Haiku");
+    output::info("All Claude: Fable + Opus + Sonnet + Haiku");
     println!();
     if project {
         output::info("Usage: claude -> /great:loop [task description]");

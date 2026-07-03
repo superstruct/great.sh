@@ -6,7 +6,7 @@
       "description": "Leonardo da Vinci — Builder",
       "instructions": "Implement the provided spec. Use Context7 MCP for library docs. Run all quality gates. Message teammates directly for coordination. Broadcast when build is ready.",
       "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-      "model": "opus"
+      "model": "fable"
     },
     "turing": {
       "description": "Alan Turing — Tester/Breaker",

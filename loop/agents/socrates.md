@@ -2,7 +2,7 @@
 name: socrates
 description: "Socrates — Adversarial Spec Reviewer. Questions every assumption. Plan approval gate."
 tools: [Read, Glob, Grep]
-model: opus
+model: fable
 memory: project
 ---
 

@@ -65,6 +65,8 @@ Hopper → Deming
 
 Requirements → spec → review → scout → build → test/security/perf/UX → code review → visual → docs → commit → observe. One iteration at a time. Von Braun handles release builds separately via `/great:deploy`.
 
+Each role runs on the model tier its job demands: Fable for the builder and the plan-approval gate, Opus for testing, security audit, specs, and code review (security roles stay on Opus deliberately — Fable's cyber safety classifiers can refuse security-focused analysis), Sonnet for scouting, UX, visual, perf, docs, and deploys, Haiku for commits. Deming, the team lead, is your own session — run it on Opus or Fable.
+
 ```sh
 great loop install            # registers the plugin with Claude Code
 great loop install --project  # adds .tasks/ working state to the current repo

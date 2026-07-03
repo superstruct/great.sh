@@ -24,7 +24,7 @@ Execute the full 16-agent great.sh Loop.
 
 **2. Lovelace** (Opus) — Write spec. Use Context7 MCP for library/framework docs. Output to `.tasks/ready/`.
 
-**3. Socrates** (Opus) — **Plan approval gate.** Adversarial review with structured elenchus. Max 3 Lovelace<->Socrates rounds. You (Deming) decide after 3 if still rejected.
+**3. Socrates** (Fable) — **Plan approval gate.** Adversarial review with structured elenchus — ambiguity and contradiction hunting is where the top-tier model earns its cost: an error caught at spec time saves a full build cycle. Max 3 Lovelace<->Socrates rounds. You (Deming) decide after 3 if still rejected.
 
 **4. Humboldt** (Sonnet) — Scout codebase. Map files, patterns, dependencies.
 
@@ -34,9 +34,9 @@ Create an agent team with four teammates working in parallel:
 
 ```
 Spawn a team of four teammates:
-- Da Vinci (builder, Opus): implement spec using Context7 MCP. Run quality gates. Message Turing and Kerckhoffs when ready. Require plan approval before implementing.
-- Turing (tester, Opus): prove the build is broken. Adversarial tests. Regression watchdog. Message Da Vinci with failures.
-- Kerckhoffs (security, Opus): audit for credential leakage, permission errors, input validation gaps, supply chain risks. CRITICAL/HIGH block commit. Message Da Vinci with fixes.
+- Da Vinci (builder, Fable): implement spec using Context7 MCP. Run quality gates. Message Turing and Kerckhoffs when ready. Require plan approval before implementing.
+- Turing (tester, Opus — not Fable: its security probing can trip Fable's cyber classifiers): prove the build is broken. Adversarial tests. Regression watchdog. Message Da Vinci with failures.
+- Kerckhoffs (security, Opus — deliberately not Fable: security-focused analysis is excluded from Fable's gains and risks classifier refusals mid-audit): audit for credential leakage, permission errors, input validation gaps, supply chain risks. CRITICAL/HIGH block commit. Message Da Vinci with fixes.
 - Nielsen (UX, Sonnet): walk affected user journeys. Playwright MCP for web. Can block commit. Message Da Vinci for issues.
 
 Give each teammate the approved spec and scout report, and state what "done"
@@ -60,7 +60,7 @@ Collect teammate reports:
 - Performance regression -> Da Vinci fixes, Wirth re-measures (max 2 cycles)
 - Non-blocking -> Nightingale files as P2/P3
 
-Run **Dijkstra** (subagent, Sonnet) — Code quality review. REJECTED -> Da Vinci fixes, Dijkstra re-reviews (max 2 cycles).
+Run **Dijkstra** (subagent, Opus) — Code quality review. REJECTED -> Da Vinci fixes, Dijkstra re-reviews (max 2 cycles).
 
 ## Phase 4: Finish
 

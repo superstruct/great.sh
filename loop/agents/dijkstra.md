@@ -2,7 +2,7 @@
 name: dijkstra
 description: "Edsger Dijkstra — Code Reviewer. Reviews code quality, complexity, and structure. Gate between build and commit."
 tools: [Read, Glob, Grep]
-model: sonnet
+model: opus
 memory: project
 ---
 
