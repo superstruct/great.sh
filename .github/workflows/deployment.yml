@@ -12,6 +12,10 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy
@@ -48,7 +52,13 @@ jobs:
             --delete
 
       - name: Invalidate CloudFront
+        env:
+          DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
+          if [ -z "$DISTRIBUTION_ID" ]; then
+            echo "::error::CLOUDFRONT_DISTRIBUTION_ID repo variable is not set — CDN not invalidated (S3 already updated)."
+            exit 1
+          fi
           aws cloudfront create-invalidation \
-            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id "$DISTRIBUTION_ID" \
             --paths "/*"
