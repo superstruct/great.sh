@@ -208,19 +208,48 @@ impl SecretProvider for KeychainProvider {
 
     fn set(&self, key: &str, value: &str) -> Result<()> {
         if cfg!(target_os = "macos") {
-            let status = std::process::Command::new("security")
-                .args([
-                    "add-generic-password",
-                    "-s",
-                    "great-sh",
-                    "-a",
-                    key,
-                    "-w",
-                    value,
-                    "-U",
-                ])
-                .status()
-                .context("failed to write to macOS Keychain")?;
+            // Deliver the command via `security -i` (stdin) so the secret
+            // never appears in the process argument list — argv is visible
+            // to every user on the machine via `ps`.
+            if key.contains(['\n', '\r']) || value.contains(['\n', '\r']) {
+                bail!("Keychain keys and values must not contain newlines");
+            }
+            // security(1)'s interactive parser: double quotes with backslash
+            // escapes for `\` and `"`.
+            fn sec_quote(s: &str) -> String {
+                let mut out = String::with_capacity(s.len() + 2);
+                out.push('"');
+                for c in s.chars() {
+                    match c {
+                        '\\' => out.push_str("\\\\"),
+                        '"' => out.push_str("\\\""),
+                        _ => out.push(c),
+                    }
+                }
+                out.push('"');
+                out
+            }
+
+            let mut child = std::process::Command::new("security")
+                .arg("-i")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .context("failed to run security")?;
+
+            if let Some(stdin) = child.stdin.as_mut() {
+                use std::io::Write;
+                let cmd = format!(
+                    "add-generic-password -s great-sh -a {} -w {} -U\n",
+                    sec_quote(key),
+                    sec_quote(value)
+                );
+                stdin
+                    .write_all(cmd.as_bytes())
+                    .context("failed to write secret to security stdin")?;
+            }
+
+            let status = child.wait().context("failed to write to macOS Keychain")?;
             if !status.success() {
                 bail!("Failed to store secret in macOS Keychain");
             }
