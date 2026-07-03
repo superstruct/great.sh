@@ -4,7 +4,7 @@ use tempfile::TempDir;
 
 // Helper to get a Command for the `great` binary
 fn great() -> Command {
-    Command::cargo_bin("great").expect("binary exists")
+    assert_cmd::cargo::cargo_bin_cmd!("great")
 }
 
 // -----------------------------------------------------------------------
@@ -2531,7 +2531,7 @@ fn sigpipe_no_broken_pipe_on_stderr() {
 
     // Spawn great --help with piped stdout; we intentionally drop the
     // stdout reader immediately to provoke SIGPIPE.
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(bin)
         .arg("--help")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

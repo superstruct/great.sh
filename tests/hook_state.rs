@@ -2,7 +2,6 @@
 /// verify state file is written, then verify statusline reads it.
 #[test]
 fn test_hook_writes_state_and_statusline_reads_it() {
-    use assert_cmd::Command;
     use std::io::Write;
 
     let session_id = format!("test-{}", std::process::id());
@@ -77,8 +76,7 @@ fn test_hook_writes_state_and_statusline_reads_it() {
 
     // Verify statusline reads it (not "idle")
     let statusline_input = serde_json::json!({ "session_id": session_id });
-    let output = Command::cargo_bin("great")
-        .expect("binary exists")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("great")
         .arg("statusline")
         .arg("--no-color")
         .write_stdin(statusline_input.to_string())

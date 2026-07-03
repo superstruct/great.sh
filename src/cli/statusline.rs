@@ -250,10 +250,16 @@ fn load_config() -> StatuslineConfig {
 // ---------------------------------------------------------------------------
 
 /// Parse session JSON from stdin. Returns default on empty/malformed input.
-/// Reads at most 64KB from stdin to avoid blocking on large inputs.
+/// Reads at most 1 MiB from stdin as a runaway-input guard; Claude Code
+/// payloads are far smaller, but a truncated JSON blob fails to parse and
+/// blanks the whole statusline, so the cap must comfortably exceed real input.
 fn parse_stdin() -> SessionInfo {
+    const MAX_STDIN: u64 = 1024 * 1024;
     let mut buf = Vec::with_capacity(65536);
-    let _ = std::io::stdin().lock().take(65536).read_to_end(&mut buf);
+    let _ = std::io::stdin()
+        .lock()
+        .take(MAX_STDIN)
+        .read_to_end(&mut buf);
 
     if buf.is_empty() {
         return SessionInfo::default();
@@ -515,11 +521,14 @@ fn visible_len(s: &str) -> usize {
 
 /// Truncate a string to at most `max_visible` visible columns.
 /// Preserves ANSI escape sequences but cuts visible characters.
-/// Appends a reset sequence if truncation happened mid-escape.
+/// Appends a reset sequence when truncating colored output so an
+/// unclosed color/style cannot bleed past the statusline.
 fn truncate_to_width(s: &str, max_visible: usize) -> String {
     let mut out = String::with_capacity(s.len());
     let mut visible = 0;
     let mut in_escape = false;
+    let mut truncated = false;
+    let mut saw_escape = false;
     for c in s.chars() {
         if in_escape {
             out.push(c);
@@ -528,14 +537,19 @@ fn truncate_to_width(s: &str, max_visible: usize) -> String {
             }
         } else if c == '\x1b' {
             in_escape = true;
+            saw_escape = true;
             out.push(c);
         } else {
             if visible >= max_visible {
+                truncated = true;
                 break;
             }
             out.push(c);
             visible += 1;
         }
+    }
+    if truncated && saw_escape {
+        out.push_str("\x1b[0m");
     }
     out
 }
@@ -1440,11 +1454,7 @@ session_timeout_secs = 60
         };
         let config = StatuslineConfig::default();
         let line = render(&session, &state, &config, 150, false, false, false);
-        assert!(
-            line.chars().all(|c| c.is_ascii()),
-            "all characters must be ASCII: {}",
-            line
-        );
+        assert!(line.is_ascii(), "all characters must be ASCII: {}", line);
     }
 
     // --- Timeout ---
