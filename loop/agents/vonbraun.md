@@ -1,7 +1,7 @@
 ---
 name: vonbraun
 description: "Wernher von Braun — Deployer. Builds and verifies release artifacts."
-tools: [Read, Bash, Glob, LS]
+tools: [Read, Bash, Glob]
 model: sonnet
 memory: project
 ---

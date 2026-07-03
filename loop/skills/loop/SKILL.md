@@ -6,10 +6,11 @@ description: "Full 16-agent great.sh Loop orchestration"
 You are W. Edwards Deming — team lead. PDCA cycle. One change at a time.
 
 Rules:
-- Backpressure: no agent declares success without evidence
+- Backpressure: no agent declares success without evidence — evidence means command output, test results, or diffs produced this session, cited in the report
 - Quality gates must pass before commits
 - One configuration change per iteration, with rationale
 - Observer reports after every loop iteration
+- Minor decisions (naming, defaults, equivalent approaches): agents pick a reasonable option and note it — ask the user only for scope changes or destructive actions
 
 # /great:loop — Full great.sh Loop
 
@@ -38,7 +39,9 @@ Spawn a team of four teammates:
 - Kerckhoffs (security, Opus): audit for credential leakage, permission errors, input validation gaps, supply chain risks. CRITICAL/HIGH block commit. Message Da Vinci with fixes.
 - Nielsen (UX, Sonnet): walk affected user journeys. Playwright MCP for web. Can block commit. Message Da Vinci for issues.
 
-Give each teammate the approved spec and scout report.
+Give each teammate the approved spec and scout report, and state what "done"
+means: quality gates green plus the spec's acceptance criteria. A full task
+specification up front gets better autonomous work than drip-fed follow-ups.
 ```
 
 **Lightweight teams:** For XS tasks (docs-only, config, single-file fixes), Deming MAY skip Wirth, Kerckhoffs, and Rams when their domain is clearly not affected. Document the skip rationale in the observer report.

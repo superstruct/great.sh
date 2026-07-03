@@ -1,7 +1,7 @@
 ---
 name: wirth
 description: "Niklaus Wirth — Performance Sentinel. Detects performance regressions, bloat, and resource waste."
-tools: [Read, Bash, Glob, LS]
+tools: [Read, Bash, Glob]
 model: sonnet
 memory: project
 ---

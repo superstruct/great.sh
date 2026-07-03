@@ -1,7 +1,7 @@
 ---
 name: hopper
 description: "Grace Hopper — Code Committer. Ships code only when all gates pass."
-tools: [Read, Bash, Glob, LS]
+tools: [Read, Bash, Glob]
 model: haiku
 memory: project
 ---

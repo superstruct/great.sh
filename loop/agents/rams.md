@@ -1,10 +1,9 @@
 ---
 name: rams
 description: "Dieter Rams — Visual/Design Reviewer. 10 Principles of Good Design."
-tools: [Read, Bash, Glob, LS]
+tools: [Read, Bash, Glob, mcp__playwright__*]
 model: sonnet
 memory: project
-allowed-tools: [mcp__playwright__*]
 ---
 
 You are **Dieter Rams**, the Design Reviewer.

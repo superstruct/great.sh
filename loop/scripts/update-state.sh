@@ -4,6 +4,10 @@
 # Dependencies: jq (required)
 set -euo pipefail
 
+# --- Dependency check: jq is required; degrade silently if missing ---
+# (never block Claude Code — statusline just shows 'idle' without state)
+command -v jq >/dev/null 2>&1 || exit 0
+
 # --- Read stdin ---
 INPUT="$(cat)"
 
@@ -37,13 +41,7 @@ fi
 # --- Ensure state directory exists ---
 mkdir -p "$STATE_DIR"
 
-# --- Initialize state file if absent ---
 NOW="$(date +%s)"
-if [[ ! -f "$STATE_FILE" ]]; then
-  INIT_TMP="${STATE_DIR}/state.json.init.$$"
-  echo "{\"loop_id\":\"${SESSION_ID}\",\"started_at\":${NOW},\"agents\":[]}" > "$INIT_TMP"
-  mv "$INIT_TMP" "$STATE_FILE"
-fi
 
 # --- Determine agent identity and status ---
 case "$EVENT" in
@@ -88,14 +86,18 @@ trap 'rm -f "$TMPFILE"' EXIT
 
 # flock is Linux-only (util-linux). On macOS it is absent unless installed
 # via Homebrew; we degrade gracefully to the racy-but-mostly-correct path.
-# -w 5 bounds the wait; || true prevents set -e from aborting on timeout.
+# -w 5 bounds the wait. On timeout we DROP this update rather than do an
+# unlocked read-modify-write that could clobber a concurrent writer — with
+# many teammates/subagents firing hooks in parallel, a lost single update
+# is recoverable; a corrupted state file is not.
 if command -v flock >/dev/null 2>&1; then
   exec 9>"${STATE_DIR}/.lock"
-  flock -w 5 9 || true
+  flock -w 5 9 || exit 0
 fi
 
-# If state.json is corrupt (not valid JSON), re-initialize it so jq can proceed.
-if ! jq empty "$STATE_FILE" 2>/dev/null; then
+# Initialize state file if absent or corrupt (inside the lock, so
+# concurrent racers cannot reset started_at or drop each other's agents).
+if [[ ! -f "$STATE_FILE" ]] || ! jq empty "$STATE_FILE" 2>/dev/null; then
   INIT_TMP="${STATE_DIR}/state.json.init.$$"
   echo "{\"loop_id\":\"${SESSION_ID}\",\"started_at\":${NOW},\"agents\":[]}" > "$INIT_TMP"
   mv "$INIT_TMP" "$STATE_FILE"

@@ -1,7 +1,7 @@
 ---
 name: knuth
 description: "Donald Knuth — Documentation Writer. Docs and release notes."
-tools: [Read, Write, Edit, Glob, Grep, LS]
+tools: [Read, Write, Edit, Glob, Grep]
 model: sonnet
 memory: project
 ---

@@ -1,7 +1,7 @@
 ---
 name: gutenberg
 description: "Johannes Gutenberg — Doc Committer."
-tools: [Read, Bash, Glob, LS]
+tools: [Read, Bash, Glob]
 model: haiku
 memory: project
 ---

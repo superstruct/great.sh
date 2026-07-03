@@ -1,7 +1,7 @@
 ---
 name: nightingale
 description: "Florence Nightingale — Requirements Curator. Transforms chaos into organized task files."
-tools: [Read, Write, Edit, Glob, Grep, LS]
+tools: [Read, Write, Edit, Glob, Grep]
 model: sonnet
 memory: project
 ---
