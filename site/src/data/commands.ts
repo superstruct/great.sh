@@ -82,18 +82,18 @@ required = [
 
 export const loopInstallOutput = `$ great loop install --project
 
-  great.sh Loop -- Installing agent team
+  great.sh Loop -- Installing plugin
 
-  [check] 15 agent personas -> ~/.claude/agents/
-  [check] 5 commands -> ~/.claude/commands/
+  [check] Marketplace registered
+  [check] Plugin installed via claude plugin install
   [check] Agent Teams config -> ~/.claude/teams/loop/
-  [check] Settings with Agent Teams enabled -> ~/.claude/settings.json
+  [check] Settings updated (env, statusLine) -> ~/.claude/settings.json
   [check] .tasks/ created, .gitignore updated
 
   great.sh Loop installed!
 
   16 roles: 4 teammates + 11 subagents + 1 team lead
-  Usage: claude -> /loop [task description]`
+  Usage: claude -> /great:loop [task description]`
 
 export const mcpBridgeOutput = `$ great mcp-bridge --preset agent
 

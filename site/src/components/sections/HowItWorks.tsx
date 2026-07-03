@@ -32,7 +32,7 @@ const steps = [
   {
     number: '05',
     title: 'Start the Loop',
-    description: 'Install the 16-role agent team into Claude Code. Type /backlog to capture requirements, then /loop to build.',
+    description: 'Install the 16-role agent team into Claude Code. Type /great:backlog to capture requirements, then /great:loop to build.',
     command: 'great loop install --project',
   },
 ]

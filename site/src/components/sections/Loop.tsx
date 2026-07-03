@@ -34,6 +34,7 @@ const phases = [
       { name: 'Hopper', role: 'Commit', methodology: 'Never commits a broken build — all gates must pass' },
       { name: 'Knuth', role: 'Docs', methodology: 'Every code example must work — docs and release notes' },
       { name: 'Gutenberg', role: 'Doc Commit', methodology: 'Commits documentation independently of code' },
+      { name: 'Von Braun', role: 'Deploy', methodology: 'Never deploys without a verified rollback path — abort triggers defined up front' },
       { name: 'Deming', role: 'Observe', methodology: 'PDCA cycle — observer report, one config change if needed' },
     ],
     flow: 'sequential' as const,
@@ -41,11 +42,11 @@ const phases = [
 ]
 
 const slashCommands = [
-  { cmd: '/backlog', desc: 'Capture requirements into .tasks/backlog/ — run this first' },
-  { cmd: '/loop', desc: 'Full 16-agent development cycle' },
-  { cmd: '/bugfix', desc: 'Targeted fix: reproduce, patch, verify, commit' },
-  { cmd: '/deploy', desc: 'Build and verify release artifacts' },
-  { cmd: '/discover', desc: 'UX discovery sweep — Nielsen maps journeys, Nightingale files issues' },
+  { cmd: '/great:backlog', desc: 'Capture requirements into .tasks/backlog/ — run this first' },
+  { cmd: '/great:loop', desc: 'Full 16-agent development cycle' },
+  { cmd: '/great:bugfix', desc: 'Targeted fix: reproduce, patch, verify, commit' },
+  { cmd: '/great:deploy', desc: 'Build and verify release artifacts — Von Braun builds, Turing smoke-tests' },
+  { cmd: '/great:discover', desc: 'UX discovery sweep — Nielsen maps journeys, Nightingale files issues' },
 ]
 
 export function Loop() {
@@ -64,11 +65,11 @@ export function Loop() {
           security auditors, performance sentinels, code reviewers, UX inspectors,
           visual reviewers, documenters, and an observer. Type{' '}
           <code className="text-accent text-sm bg-accent-muted px-1.5 py-0.5 rounded font-mono">
-            /backlog
+            /great:backlog
           </code>{' '}
           to capture requirements, then{' '}
           <code className="text-accent text-sm bg-accent-muted px-1.5 py-0.5 rounded font-mono">
-            /loop
+            /great:loop
           </code>{' '}
           to execute.
         </p>
