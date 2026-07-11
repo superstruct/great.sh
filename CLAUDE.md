@@ -69,13 +69,13 @@ infra/cdk/                # AWS CDK stack
 
 ## great.sh Loop (`loop/`)
 
-The `loop/` directory contains the great.sh Loop — a 16-role AI agent orchestration methodology (4 teammates + 11 subagents + 1 team lead) shipped as a Claude Code plugin. `great loop install` registers the `great-sh` marketplace and runs `claude plugin install great@great-sh`. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
+The `loop/` directory contains the great.sh Loop — an evidence-gated AI agent methodology shipped as a Claude Code plugin: builder, verifier, and reviewer roles plus an optional scout, led by the user's own session. Phases end when exit criteria are met (quality gates green, no CONFIRMED blocking findings), never on fixed round caps. `great loop install` registers the `great-sh` marketplace and runs `claude plugin install great@great-sh`. These instructions are **stack-agnostic** and must work with any language/framework/toolchain.
 
 ### Structure
 ```
 loop/
 ├── .claude-plugin/  # plugin.json manifest
-├── agents/          # Agent persona definitions (15 agents; Deming, the team lead, is the 16th role)
+├── agents/          # Role definitions (builder, verifier, reviewer, scout)
 ├── skills/          # Slash-command skills (/great:loop, /great:backlog, /great:bugfix, /great:deploy, /great:discover)
 ├── hooks/           # hooks.json — statusline state-tracking hooks
 ├── scripts/         # update-state.sh hook handler

@@ -2,7 +2,7 @@
 
 **The managed AI dev environment.** Alpha — open to testing and feedback.
 
-One command. 15 AI agents. Fully configured. Open source.
+One command. A full AI agent team. Fully configured. Open source.
 
 ## Quick Start
 
@@ -15,7 +15,7 @@ claude
 ## What it does
 
 - **One command setup** — from a blank machine to a fully configured AI dev environment
-- **AI agent orchestration** — 15 specialized agents installed into Claude Code with `great loop install`
+- **AI agent orchestration** — the great.sh Loop's evidence-gated agent team installed into Claude Code with `great loop install`
 - **MCP server management** — install, configure, and credential-inject MCP servers from the registry
 - **Cloud-synced credentials** — zero-knowledge encrypted vault syncs API keys across machines
 
@@ -53,19 +53,20 @@ claude mcp add --scope user great-bridge -- great mcp-bridge
 
 ## The great.sh Loop
 
-A 16-role AI agent orchestration methodology (4 teammates + 11 subagents + 1 team lead), shipped as a Claude Code plugin. Each role is embodied by a historical figure whose expertise maps to the task.
+An evidence-gated AI agent methodology shipped as a Claude Code plugin: four functional roles instead of a fixed pipeline, recalibrated for models that plan and verify their own work.
+
+- **builder** — implements the spec, runs quality gates, answers findings with evidence
+- **verifier** — adversarial: tries to prove the change broken or insecure (correctness, regression, security, performance)
+- **reviewer** — read-only quality review (structure, simplification, UX, output design, docs)
+- **scout** (optional) — read-only recon for large or unfamiliar change surfaces
 
 ```
-Nightingale → Lovelace → Socrates → Humboldt → Da Vinci →
-  Wirth / Turing / Kerckhoffs / Nielsen (parallel) →
-  Dijkstra (code review) → Rams (visual) →
-  Knuth + Gutenberg (docs) →
-Hopper → Deming
+Plan (lead) → Build & Verify (builder + verifier + reviewer) → Finish (lead)
 ```
 
-Requirements → spec → review → scout → build → test/security/perf/UX → code review → visual → docs → commit → observe. One iteration at a time. Von Braun handles release builds separately via `/great:deploy`.
+Your session is the team lead: it writes the spec, self-reviews it for gaps, spawns the team, and commits. A phase ends when its exit criteria are met — quality gates green plus no CONFIRMED blocking findings — never after a fixed number of rounds. Verifier findings must cite reproductions; the builder responds with rerun evidence, not re-argument.
 
-Each role runs on the model tier its job demands: Fable for the builder and the plan-approval gate, Opus for testing, security audit, specs, and code review (security roles stay on Opus deliberately — Fable's cyber safety classifiers can refuse security-focused analysis), Sonnet for scouting, UX, visual, perf, docs, and deploys, Haiku for commits. Deming, the team lead, is your own session — run it on Opus or Fable.
+Roles inherit your session model by default. Pin a tier per role in `~/.claude/teams/loop/config.json` when the work demands it — e.g. Opus for security-audit-heavy verification, since Fable-class cyber safety classifiers can refuse security-probing work mid-audit.
 
 ```sh
 great loop install            # registers the plugin with Claude Code
