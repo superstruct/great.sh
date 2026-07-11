@@ -6,36 +6,27 @@ import { motion } from 'motion/react'
 
 const phases = [
   {
-    label: 'Phase 1 — Sequential',
+    label: 'Phase 1 — Plan',
     agents: [
-      { name: 'Nightingale', role: 'Requirements', methodology: 'Transforms chaos into organized task files with statistical discipline' },
-      { name: 'Lovelace', role: 'Spec', methodology: 'Produces self-contained specs so precise a builder needs nothing else' },
-      { name: 'Socrates', role: 'Review', methodology: 'Adversarial plan approval gate using structured elenchus' },
-      { name: 'Humboldt', role: 'Scout', methodology: 'Maps codebase connections before anyone touches code' },
+      { name: 'Lead', role: 'Spec + self-review', methodology: 'Your session picks the task, writes the spec, and hunts its own gaps before any code' },
+      { name: 'Scout', role: 'Recon (optional)', methodology: 'Read-only map of large or unfamiliar change surfaces' },
     ],
     flow: 'sequential' as const,
   },
   {
-    label: 'Phase 2 — Parallel Team',
+    label: 'Phase 2 — Build & Verify',
     agents: [
-      { name: 'Da Vinci', role: 'Build', methodology: 'Turns specs into working code, runs all quality gates' },
-      { name: 'Turing', role: 'Test', methodology: 'Adversarial tester — proves the build is broken' },
-      { name: 'Kerckhoffs', role: 'Security', methodology: 'Audits credentials, permissions, input validation, supply chain' },
-      { name: 'Nielsen', role: 'UX', methodology: '10 Usability Heuristics applied to every user journey' },
+      { name: 'Builder', role: 'Build', methodology: 'Turns specs into working code, runs all quality gates, answers findings with evidence' },
+      { name: 'Verifier', role: 'Adversarial verify', methodology: 'Tries to prove the change broken or insecure — correctness, regression, security, performance. Findings must cite reproductions' },
+      { name: 'Reviewer', role: 'Quality review', methodology: 'Read-only review — structure, simplification, UX, output design, docs' },
     ],
     flow: 'parallel' as const,
-    note: 'Wirth (Performance Sentinel) runs in parallel — measures artifact size, flags regressions',
+    note: 'Ends when gates are green and no CONFIRMED findings remain — not after a fixed number of rounds',
   },
   {
-    label: 'Phase 3 — Gate + Finish',
+    label: 'Phase 3 — Finish',
     agents: [
-      { name: 'Dijkstra', role: 'Code Review', methodology: 'Structured programming principles — reviews quality, complexity, structure' },
-      { name: 'Rams', role: 'Visual Review', methodology: '10 Principles of Good Design applied to output aesthetics' },
-      { name: 'Hopper', role: 'Commit', methodology: 'Never commits a broken build — all gates must pass' },
-      { name: 'Knuth', role: 'Docs', methodology: 'Every code example must work — docs and release notes' },
-      { name: 'Gutenberg', role: 'Doc Commit', methodology: 'Commits documentation independently of code' },
-      { name: 'Von Braun', role: 'Deploy', methodology: 'Never deploys without a verified rollback path — abort triggers defined up front' },
-      { name: 'Deming', role: 'Observe', methodology: 'PDCA cycle — observer report, one config change if needed' },
+      { name: 'Lead', role: 'Commit + observe', methodology: 'Commits only with all gates green, writes the observer report, one config change max' },
     ],
     flow: 'sequential' as const,
   },
@@ -43,10 +34,10 @@ const phases = [
 
 const slashCommands = [
   { cmd: '/great:backlog', desc: 'Capture requirements into .tasks/backlog/ — run this first' },
-  { cmd: '/great:loop', desc: 'Full 16-agent development cycle' },
+  { cmd: '/great:loop', desc: 'Full evidence-gated development cycle' },
   { cmd: '/great:bugfix', desc: 'Targeted fix: reproduce, patch, verify, commit' },
-  { cmd: '/great:deploy', desc: 'Build and verify release artifacts — Von Braun builds, Turing smoke-tests' },
-  { cmd: '/great:discover', desc: 'UX discovery sweep — Nielsen maps journeys, Nightingale files issues' },
+  { cmd: '/great:deploy', desc: 'Build and verify release artifacts with a rollback path defined up front' },
+  { cmd: '/great:discover', desc: 'UX discovery sweep — reviewer maps journeys, lead files issues' },
 ]
 
 export function Loop() {
@@ -56,14 +47,15 @@ export function Loop() {
         {/* Heading */}
         <h2 className="font-display text-3xl md:text-4xl text-text-primary text-center mb-4">
           great loop{' '}
-          <span className="text-text-secondary">— 16 roles, two steps</span>
+          <span className="text-text-secondary">— evidence over role-play</span>
         </h2>
         <p className="text-text-secondary text-center mb-16 max-w-2xl mx-auto leading-relaxed">
-          The great.sh Loop is a 16-role AI agent orchestration methodology that
-          ships inside every great.sh install. One command configures Claude Code
-          with a full team: requirements analysts, spec writers, builders, testers,
-          security auditors, performance sentinels, code reviewers, UX inspectors,
-          visual reviewers, documenters, and an observer. Type{' '}
+          The great.sh Loop is an evidence-gated agent methodology that ships
+          inside every great.sh install. One command configures Claude Code with
+          a lean team — a builder, an adversarial verifier, and a quality
+          reviewer, plus an optional scout — where no agent declares success
+          without cited command output and phases end when exit criteria are
+          met, not after a fixed number of rounds. Type{' '}
           <code className="text-accent text-sm bg-accent-muted px-1.5 py-0.5 rounded font-mono">
             /great:backlog
           </code>{' '}
