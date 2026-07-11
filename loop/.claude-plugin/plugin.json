@@ -1,5 +1,5 @@
 {
   "name": "great",
-  "version": "0.3.0",
-  "description": "great.sh Loop — 16-role AI agent orchestration"
+  "version": "0.4.0",
+  "description": "great.sh Loop — evidence-gated AI agent loop (builder, verifier, reviewer + optional scout)"
 }

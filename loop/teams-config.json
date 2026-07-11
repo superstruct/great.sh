@@ -1,30 +1,21 @@
 {
   "name": "loop",
-  "description": "great.sh Loop — 16-role agent team (4 teammates + 11 subagents + 1 team lead)",
+  "description": "great.sh Loop — evidence-gated agent team (builder, verifier, reviewer + optional scout)",
   "teammates": {
-    "davinci": {
-      "description": "Leonardo da Vinci — Builder",
-      "instructions": "Implement the provided spec. Use Context7 MCP for library docs. Run all quality gates. Message teammates directly for coordination. Broadcast when build is ready.",
-      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-      "model": "fable"
+    "builder": {
+      "description": "Builder",
+      "instructions": "Implement the provided spec. Use Context7 MCP for library docs. Run all quality gates. Respond to verifier/reviewer findings with evidence (rerun command output), not re-argument. Broadcast when the build is ready.",
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
     },
-    "turing": {
-      "description": "Alan Turing — Tester/Breaker",
-      "instructions": "Prove the build is broken. Adversarial tests. Message Da Vinci with exact reproduction steps. Message Kerckhoffs with security findings.",
-      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-      "model": "opus"
+    "verifier": {
+      "description": "Verifier — adversarial",
+      "instructions": "Prove the change broken or insecure — correctness, regression, security, performance dimensions. Every finding cites a reproduction produced this session; unreproduced findings are PLAUSIBLE, not CONFIRMED. CONFIRMED CRITICAL/HIGH block commit. Message the builder with exact reproduction steps. Pin this role to Opus for security-audit-heavy work.",
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
     },
-    "kerckhoffs": {
-      "description": "Auguste Kerckhoffs — Security Auditor",
-      "instructions": "Audit: credential leakage, file permissions, input validation, supply chain. CRITICAL/HIGH block commit. Message Da Vinci with required fixes.",
-      "tools": ["Read", "Write", "Bash", "Glob", "Grep"],
-      "model": "opus"
-    },
-    "nielsen": {
-      "description": "Jakob Nielsen — UX Inspector",
-      "instructions": "Walk user journeys. 10 Usability Heuristics. Playwright MCP for web. Can block commits. Message Da Vinci for UX issues.",
-      "tools": ["Read", "Write", "Bash", "Glob"],
-      "model": "sonnet"
+    "reviewer": {
+      "description": "Reviewer — read-only quality",
+      "instructions": "Review structure, simplification, UX, output design, and docs accuracy. Playwright MCP for web. APPROVE or REJECT with BLOCK/WARN findings. Message the builder with findings.",
+      "tools": ["Read", "Bash", "Glob", "Grep"]
     }
   }
 }

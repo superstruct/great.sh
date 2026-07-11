@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "great",
-      "description": "great.sh Loop — 16-role AI agent orchestration",
+      "description": "great.sh Loop — evidence-gated AI agent loop (builder, verifier, reviewer + optional scout)",
       "source": "./loop",
       "category": "development",
       "homepage": "https://github.com/superstruct/great.sh"

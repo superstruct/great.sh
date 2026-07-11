@@ -15,21 +15,21 @@
 
 List only agents that participated in this iteration.
 
-| Agent | Role | Retries | Notes |
+| Agent | Role | Turns | Notes |
 |---|---|---|---|
-| [Name] | [Role] | 0 | [Key observation or "Clean"] |
+| [Name] | [Role] | 1 | [Key observation or "Clean"] |
 
 ## Bottleneck
 
-[Agent + reason, or "None — zero-retry iteration"]
+[Agent + reason, or "None — zero-rework iteration"]
 
 ## Metrics
 
+- Total agent turns: [count of subagent runs + teammate finding-fix exchanges]
 - Tests: [count]
 - Lint/fmt: [status]
-- Security findings: [CRITICAL/HIGH count]
-- UX blockers: [count]
-- Code quality blockers: [count]
+- CONFIRMED findings: [count by severity]
+- Review blockers: [count]
 
 ## Hypothesis
 

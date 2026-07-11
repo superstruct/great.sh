@@ -126,8 +126,12 @@ fn is_great_loop_hook(entry: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Names of the 15 managed agent files (used for legacy cleanup).
-const AGENT_NAMES: &[&str] = &[
+/// Names of the 4 current role agent files shipped in the plugin.
+const ROLE_NAMES: &[&str] = &["builder", "verifier", "reviewer", "scout"];
+
+/// Names of the 15 retired persona agent files (used only for legacy cleanup
+/// of pre-plugin installs under ~/.claude/agents/).
+const LEGACY_AGENT_NAMES: &[&str] = &[
     "nightingale",
     "lovelace",
     "socrates",
@@ -185,7 +189,7 @@ fn migrate_legacy_install(claude_dir: &std::path::Path) -> Result<MigrationResul
     let mut removed = 0usize;
 
     // Remove legacy agent files
-    for name in AGENT_NAMES {
+    for name in LEGACY_AGENT_NAMES {
         let path = agents_dir.join(format!("{}.md", name));
         if path.exists() {
             std::fs::remove_file(&path)
@@ -662,8 +666,8 @@ fn run_install(project: bool, force: bool, _non_interactive: bool) -> Result<()>
     println!();
     output::header("great.sh Loop installed!");
     println!();
-    output::info("16 roles: 4 teammates + 11 subagents + 1 team lead");
-    output::info("All Claude: Fable + Opus + Sonnet + Haiku");
+    output::info("Roles: builder, verifier, reviewer + optional scout");
+    output::info("Model: inherits your session model (pin per-role in teams config)");
     println!();
     if project {
         output::info("Usage: claude -> /great:loop [task description]");
@@ -689,11 +693,13 @@ fn run_status() -> Result<()> {
         Some(dir) => {
             output::success(&format!("Plugin installed: {}", dir.display()));
 
-            let agents_ok = dir.join("agents").join("nightingale.md").exists();
+            let agents_ok = ROLE_NAMES
+                .iter()
+                .all(|name| dir.join("agents").join(format!("{}.md", name)).exists());
             if agents_ok {
-                output::success("Agent personas: installed");
+                output::success("Role agents: installed");
             } else {
-                output::error("Agent personas: missing from plugin");
+                output::error("Role agents: missing from plugin");
             }
 
             let skills_ok = dir.join("skills").join("loop").join("SKILL.md").exists();
@@ -842,7 +848,7 @@ fn run_uninstall() -> Result<()> {
     // Also clean up legacy files if they exist
     let legacy_agents_dir = claude_dir.join("agents");
     let mut legacy_removed = 0;
-    for name in AGENT_NAMES {
+    for name in LEGACY_AGENT_NAMES {
         let path = legacy_agents_dir.join(format!("{}.md", name));
         if path.exists() {
             std::fs::remove_file(&path)
@@ -1162,21 +1168,59 @@ mod tests {
         }
     }
 
-    /// Validate that no agent markdown files contain "Architecton".
+    /// Every current role agent file exists and contains no "Architecton".
     #[test]
-    fn test_no_architecton_in_agent_files() {
-        for name in AGENT_NAMES {
+    fn test_role_agent_files_exist_without_architecton() {
+        for name in ROLE_NAMES {
             let full_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("loop/agents")
                 .join(format!("{}.md", name));
-            if full_path.exists() {
-                let content = std::fs::read_to_string(&full_path).unwrap();
-                assert!(
-                    !content.contains("Architecton"),
-                    "Agent '{}' must not contain 'Architecton' — use 'great.sh Loop'",
-                    name
-                );
-            }
+            assert!(
+                full_path.exists(),
+                "Role agent file must exist: loop/agents/{}.md",
+                name
+            );
+            let content = std::fs::read_to_string(&full_path).unwrap();
+            assert!(
+                !content.contains("Architecton"),
+                "Agent '{}' must not contain 'Architecton' — use 'great.sh Loop'",
+                name
+            );
+        }
+    }
+
+    /// Retired persona agent files must not ship in the plugin.
+    #[test]
+    fn test_retired_persona_files_removed() {
+        for name in LEGACY_AGENT_NAMES {
+            let full_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("loop/agents")
+                .join(format!("{}.md", name));
+            assert!(
+                !full_path.exists(),
+                "Retired persona file must not exist: loop/agents/{}.md",
+                name
+            );
+        }
+    }
+
+    /// Teams config carries exactly the current teammate roster, with no
+    /// per-role model pins — roles inherit the session model by default.
+    #[test]
+    fn test_teams_config_roster() {
+        let parsed: serde_json::Value = serde_json::from_str(TEAMS_CONFIG).expect("valid JSON");
+        let teammates = parsed["teammates"]
+            .as_object()
+            .expect("teammates must be an object");
+        let mut names: Vec<&str> = teammates.keys().map(|k| k.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["builder", "reviewer", "verifier"]);
+        for (name, teammate) in teammates {
+            assert!(
+                teammate.get("model").is_none(),
+                "teammate '{}' must inherit the session model (no model key)",
+                name
+            );
         }
     }
 

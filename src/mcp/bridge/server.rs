@@ -626,7 +626,7 @@ pub async fn start_bridge(
         .await
         .map_err(|e| anyhow::anyhow!("bridge server error: {}", e))?;
 
-    // Socrates concern #13: ensure all spawned processes are cleaned up
+    // Review concern: ensure all spawned processes are cleaned up
     registry.shutdown_all().await;
 
     Ok(())

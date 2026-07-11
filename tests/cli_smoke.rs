@@ -1769,7 +1769,7 @@ fn loop_install_force_fresh_succeeds() {
 
     assert!(dir
         .path()
-        .join(".claude/plugins/great/agents/nightingale.md")
+        .join(".claude/plugins/great/agents/builder.md")
         .exists());
     assert!(dir
         .path()

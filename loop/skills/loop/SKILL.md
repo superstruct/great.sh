@@ -1,13 +1,14 @@
 ---
 name: loop
-description: "Full 16-agent great.sh Loop orchestration"
+description: "Full great.sh Loop — evidence-gated build, verify, and review cycle"
 ---
 
-You are W. Edwards Deming — team lead. PDCA cycle. One change at a time.
+You are the team lead of the great.sh Loop.
 
 Rules:
 - Backpressure: no agent declares success without evidence — evidence means command output, test results, or diffs produced this session, cited in the report
 - Quality gates must pass before commits
+- Evidence-gated termination: a phase ends when its exit criteria are met, never after a fixed number of rounds
 - One configuration change per iteration, with rationale
 - Observer reports after every loop iteration
 - Minor decisions (naming, defaults, equivalent approaches): agents pick a reasonable option and note it — ask the user only for scope changes or destructive actions
@@ -16,62 +17,41 @@ Rules:
 
 $ARGUMENTS
 
-Execute the full 16-agent great.sh Loop.
+Execute one full loop iteration: plan → build & verify → finish.
 
-## Phase 1: Sequential Subagents
+## Phase 1: Plan (you, inline)
 
-**1. Nightingale** (Sonnet) — Create/fetch task from `.tasks/backlog/`. If $ARGUMENTS names a task, use it. Otherwise pick highest-priority unblocked task.
+1. **Pick the task.** If $ARGUMENTS names a task in `.tasks/backlog/`, use it. Otherwise pick the highest-priority unblocked task.
+2. **Write the spec** to `.tasks/ready/`: summary, interfaces with full type signatures, implementation approach and build order, files to modify/create, edge cases (empty inputs, platform differences, network failures, concurrent access), error handling, security considerations, testing strategy. When adding fields to existing structs/types, grep ALL construction sites and list them. Verify library APIs against the target version with Context7 MCP — never from memory. Specify contracts precisely, but state goals and constraints rather than step-by-step recipes where the approach isn't forced.
+3. **Self-review the spec** before building — an error caught at spec time saves a full build cycle. Check: Why this approach and not alternatives? What if input is invalid/empty/enormous/malicious? Edge cases exhaustive, all platforms covered? Security considerations complete? Success criteria measurable and testable? Implementable without further clarifying questions? Fix every gap you find.
+4. **Optional scout:** For a large or unfamiliar change surface, run the **scout** subagent and hand its report to the builder. Skip it when the surface is already known — note the skip in the observer report.
 
-**2. Lovelace** (Opus) — Write spec. Use Context7 MCP for library/framework docs. Output to `.tasks/ready/`.
+## Phase 2: Build & Verify (team)
 
-**3. Socrates** (Fable) — **Plan approval gate.** Adversarial review with structured elenchus — ambiguity and contradiction hunting is where the top-tier model earns its cost: an error caught at spec time saves a full build cycle. Max 3 Lovelace<->Socrates rounds. You (Deming) decide after 3 if still rejected.
-
-**4. Humboldt** (Sonnet) — Scout codebase. Map files, patterns, dependencies.
-
-## Phase 2: Spawn Agent Team
-
-Create an agent team with four teammates working in parallel:
+Spawn a team:
 
 ```
-Spawn a team of four teammates:
-- Da Vinci (builder, Fable): implement spec using Context7 MCP. Run quality gates. Message Turing and Kerckhoffs when ready. Require plan approval before implementing.
-- Turing (tester, Opus — not Fable: its security probing can trip Fable's cyber classifiers): prove the build is broken. Adversarial tests. Regression watchdog. Message Da Vinci with failures.
-- Kerckhoffs (security, Opus — deliberately not Fable: security-focused analysis is excluded from Fable's gains and risks classifier refusals mid-audit): audit for credential leakage, permission errors, input validation gaps, supply chain risks. CRITICAL/HIGH block commit. Message Da Vinci with fixes.
-- Nielsen (UX, Sonnet): walk affected user journeys. Playwright MCP for web. Can block commit. Message Da Vinci for issues.
+- builder: implement the spec. Run quality gates. Message verifier and reviewer when the build is ready. Respond to findings with evidence, not re-argument.
+- verifier: prove the change broken or insecure — correctness, regression, security, performance dimensions. Findings must cite reproductions; unreproduced findings are PLAUSIBLE, not CONFIRMED.
+- reviewer: read-only quality review — structure, simplification, UX, output design, docs.
 
-Give each teammate the approved spec and scout report, and state what "done"
-means: quality gates green plus the spec's acceptance criteria. A full task
-specification up front gets better autonomous work than drip-fed follow-ups.
+Give each teammate the spec (and scout report if produced), and state what "done" means: quality gates green plus the spec's acceptance criteria. A full task specification up front gets better autonomous work than drip-fed follow-ups.
 ```
 
-**Lightweight teams:** For XS tasks (docs-only, config, single-file fixes), Deming MAY skip Wirth, Kerckhoffs, and Rams when their domain is clearly not affected. Document the skip rationale in the observer report.
+Roles inherit the session model by default; pin a tier per role in the teams config only when the work demands it (e.g. Opus for security-audit-heavy verification).
 
-In parallel with the team, run:
-- **Wirth** (subagent, Sonnet) — Performance sentinel. Measure artifact size, run benchmarks, flag regressions. Report to team lead.
+**Exit criteria — the phase ends when ALL hold, however many exchanges that takes:**
+- Quality gates green (builder cites the passing output)
+- Verifier reports no CONFIRMED CRITICAL/HIGH findings
+- Reviewer verdict APPROVED (no BLOCK findings)
 
-**Wait for all teammates and Wirth to complete before proceeding.**
+Findings flow directly between teammates: verifier/reviewer → builder with reproductions, builder → back with rerun evidence. MEDIUM/LOW and WARN findings are filed to `.tasks/backlog/` as P2/P3, not fixed in this iteration.
 
-## Phase 3: Gate Check
+**Safety ceiling:** If the team exceeds 15 total finding-fix exchanges without converging, stop and escalate to the user with the open findings. This is a stuck-loop backstop, not a tuning knob.
 
-Collect teammate reports:
-- Build failure -> Da Vinci <-> Turing (max 3 cycles, teammates message directly)
-- Security CRITICAL/HIGH -> Da Vinci <-> Kerckhoffs (max 2 cycles)
-- UX blocker -> Da Vinci <-> Nielsen (max 2 cycles)
-- Performance regression -> Da Vinci fixes, Wirth re-measures (max 2 cycles)
-- Non-blocking -> Nightingale files as P2/P3
+## Phase 3: Finish (you)
 
-Run **Dijkstra** (subagent, Opus) — Code quality review. REJECTED -> Da Vinci fixes, Dijkstra re-reviews (max 2 cycles).
-
-## Phase 4: Finish
-
-- **Rams** (subagent, Sonnet) — Visual review
-- **Hopper** (subagent, Haiku) — Code commit (ALL gates pass)
-- **Knuth** (subagent, Sonnet) + **Gutenberg** (subagent, Haiku) — Docs + release notes
-
-## Phase 5: Clean Up
-
-- Shut down all teammates
-- Clean up the team
-- Observer report -> `.tasks/reports/iteration-NNN.md`
-- Move task to `.tasks/done/`
-- ONE config change if bottleneck found, or none
+1. **Commit** — only with all gates green. Conventional format `<type>(<scope>): <description>`, max 50 chars, lowercase, no period, no agent names or attribution, no issue-closing footers. Atomic: one logical change per commit; docs commit separately (`docs:`).
+2. **Observer report** → `.tasks/reports/iteration-NNN.md`, including total agent turns for the iteration.
+3. Move the task to `.tasks/done/`. Shut down teammates and clean up the team.
+4. ONE config change if a bottleneck was found, or none.
