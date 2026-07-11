@@ -7,6 +7,7 @@ use clap::Args as ClapArgs;
 use colored::Colorize;
 use serde::Deserialize;
 use serde_json::Value;
+use unicode_width::UnicodeWidthChar;
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -501,7 +502,8 @@ fn resolve_width(args_width: Option<u16>) -> u16 {
 // ---------------------------------------------------------------------------
 
 /// Compute the visible length of a string by stripping ANSI escape sequences.
-/// Counts Unicode characters (not bytes) for correct width of multi-byte chars.
+/// Counts display columns (per UAX #11) so double-width glyphs, combining
+/// marks, and control chars are measured correctly, not as one char each.
 fn visible_len(s: &str) -> usize {
     let mut len = 0;
     let mut in_escape = false;
@@ -513,7 +515,7 @@ fn visible_len(s: &str) -> usize {
         } else if c == '\x1b' {
             in_escape = true;
         } else {
-            len += 1;
+            len += UnicodeWidthChar::width(c).unwrap_or(0);
         }
     }
     len
@@ -540,12 +542,15 @@ fn truncate_to_width(s: &str, max_visible: usize) -> String {
             saw_escape = true;
             out.push(c);
         } else {
-            if visible >= max_visible {
+            let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+            // Check before pushing so a double-width glyph never straddles
+            // the budget boundary.
+            if visible + char_width > max_visible {
                 truncated = true;
                 break;
             }
             out.push(c);
-            visible += 1;
+            visible += char_width;
         }
     }
     if truncated && saw_escape {
@@ -1645,12 +1650,45 @@ session_timeout_secs = 60
     }
 
     #[test]
+    fn test_visible_len_counts_double_width_columns() {
+        // N double-width glyphs measure 2N columns.
+        assert_eq!(visible_len("\u{3042}\u{3042}\u{3042}"), 6);
+        assert_eq!(visible_len("a\u{3042}b"), 4);
+    }
+
+    #[test]
+    fn test_visible_len_counts_combining_marks_as_zero() {
+        // Combining acute accent (U+0301) and ZWJ (U+200D) add no columns.
+        assert_eq!(visible_len("e\u{0301}"), 1);
+        assert_eq!(visible_len("a\u{200d}b"), 2);
+    }
+
+    #[test]
     fn test_truncate_to_width() {
         assert_eq!(truncate_to_width("hello world", 5), "hello");
         let colored = "\x1b[31mred text\x1b[0m";
         let truncated = truncate_to_width(colored, 3);
         assert!(truncated.contains("\x1b[31m"));
         assert_eq!(visible_len(&truncated), 3);
+    }
+
+    #[test]
+    fn test_truncate_to_width_cuts_at_column_budget() {
+        // Budget 5, three double-width glyphs (2 cols each): keep 2 (4 cols),
+        // drop the third rather than let it straddle the boundary.
+        let out = truncate_to_width("\u{3042}\u{3042}\u{3042}", 5);
+        assert_eq!(out, "\u{3042}\u{3042}");
+        assert_eq!(visible_len(&out), 4);
+    }
+
+    #[test]
+    fn test_truncate_to_width_appends_reset_on_double_width_cut() {
+        // A colored double-width string cut mid-way still closes the color.
+        let colored = "\x1b[31m\u{3042}\u{3042}\u{3042}\x1b[0m";
+        let truncated = truncate_to_width(colored, 3);
+        assert!(truncated.contains("\x1b[31m"));
+        assert!(truncated.ends_with("\x1b[0m"));
+        assert_eq!(visible_len(&truncated), 2);
     }
 
     #[test]
