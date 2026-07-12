@@ -20,8 +20,9 @@ export function Features() {
           Everything you need. Nothing you don't.
         </h2>
         <p className="text-text-secondary text-center mb-16 max-w-2xl mx-auto">
-          great.sh is the only tool that touches all five layers: template provisioning,
-          AI agent orchestration, MCP configuration, credential management, and config sync.
+          great.sh is the only tool that touches all five layers: a multi-backend MCP
+          bridge, template provisioning, MCP configuration, credential management, and
+          AI agent orchestration.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

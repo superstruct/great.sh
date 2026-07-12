@@ -16,11 +16,11 @@ export function App() {
       <Nav />
       <main>
         <Hero />
+        <Bridge />
         <Features />
         <Config />
         <HowItWorks />
         <Loop />
-        <Bridge />
         <Templates />
         <Comparison />
         <OpenSource />

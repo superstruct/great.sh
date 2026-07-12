@@ -3,11 +3,11 @@ import { cn } from '@/lib/utils'
 import { Menu, X, Github } from 'lucide-react'
 
 const navLinks = [
+  { label: 'Bridge', href: '#bridge' },
   { label: 'Features', href: '#features' },
   { label: 'Config', href: '#config' },
   { label: 'How it Works', href: '#how-it-works' },
   { label: 'Loop', href: '#loop' },
-  { label: 'Bridge', href: '#bridge' },
   { label: 'Templates', href: '#templates' },
   { label: 'Compare', href: '#compare' },
 ]

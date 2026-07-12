@@ -47,7 +47,7 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="text-text-secondary text-lg md:text-xl mb-4 max-w-2xl"
           >
-            The managed AI dev environment.
+            One MCP server. Five AI backends.
           </motion.p>
 
           <motion.p
@@ -56,7 +56,9 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.4 }}
             className="text-text-tertiary text-base md:text-lg mb-12 max-w-2xl"
           >
-            One command. A full AI agent team. Fully configured. Open source.
+            Gemini, Codex, Claude, Grok, and local Ollama behind a single Rust
+            binary — plus your whole AI dev environment, fully configured.
+            Open source.
           </motion.p>
 
           <motion.div
@@ -95,10 +97,10 @@ export function Hero() {
               Get Started
             </a>
             <a
-              href="#features"
+              href="#bridge"
               className="text-text-secondary hover:text-accent transition-colors"
             >
-              Learn more &darr;
+              See the bridge &darr;
             </a>
           </motion.div>
         </div>

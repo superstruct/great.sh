@@ -96,6 +96,22 @@ export const loopInstallOutput = `$ great loop install --project
   Model: inherits your session model (pin per-role in teams config)
   Usage: claude -> /great:loop [task description]`
 
+export const bridgeAddCommand =
+  'claude mcp add --scope user great-bridge -- great mcp-bridge'
+
+export const bridgeDemoOutput = `$ claude
+> Get a second opinion on this diff: ask gemini to review it,
+  and ask the local ollama model to summarize the risk.
+
+* great-bridge - prompt (backend: "gemini")
+  |- Gemini: Rename is safe, but line 42 drops the error
+     context — propagate the source error instead.
+
+* great-bridge - prompt (backend: "ollama", model: "llama3.2")
+  |- Ollama: Low risk. One behavioral change in retry logic.
+
+* Both backends agree the rename is safe. Fixing line 42.`
+
 export const mcpBridgeOutput = `$ great mcp-bridge --preset agent
 
   great.sh MCP Bridge — Starting (preset: agent)
@@ -104,8 +120,10 @@ export const mcpBridgeOutput = `$ great mcp-bridge --preset agent
   [check] Gemini CLI    gemini (GEMINI_API_KEY set)
   [check] Codex CLI     codex  (OPENAI_API_KEY set)
   [check] Claude CLI    claude (logged in)
+  [check] Ollama        ollama (local)
 
-  Preset: agent (6 tools)
-  Tools: prompt, run, wait, list_tasks, get_result, kill_task
+  Preset: agent (7 tools)
+  Tools: prompt, run, wait, list_tasks, get_result,
+         kill_task, cleanup_tasks
 
   Listening on stdio (JSON-RPC 2.0)`
